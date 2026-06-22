@@ -1,0 +1,80 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>{% block title %}Job Boards{% endblock %}</title>
+  <script>
+    (function () {
+      try {
+        if (localStorage.getItem("jobboards-theme") === "light") {
+          document.documentElement.setAttribute("data-theme", "light");
+        }
+      } catch (_) {}
+    })();
+  </script>
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+  {% block head %}{% endblock %}
+</head>
+<body class="{% block body_class %}{% endblock %}">
+  <div class="app-shell">
+    <header class="site-header">
+      <div class="brand">
+        <div class="brand-icon" aria-hidden="true">🌿</div>
+        <div>
+          <h1 class="brand-title">Eco &amp; Evo Jobs</h1>
+          <p class="brand-sub">ecoevojobs · EvolDir · Science Careers</p>
+        </div>
+      </div>
+      <div class="header-actions">
+        <nav class="site-nav" aria-label="Main">
+          <a href="/" class="site-nav-link{% if request.path == '/' %} is-active{% endif %}">Jobs</a>
+          <a href="/subjects" class="site-nav-link{% if request.path == '/subjects' %} is-active{% endif %}">Subjects</a>
+        </nav>
+        <span class="last-updated" id="last-updated">—</span>
+        <button
+          type="button"
+          class="theme-toggle"
+          id="theme-toggle"
+          aria-label="Switch to light mode"
+          title="Dark mode"
+        >
+          <svg class="theme-icon theme-icon-sun" viewBox="0 0 24 24" aria-hidden="true">
+            <circle cx="12" cy="12" r="4.5" fill="currentColor"/>
+            <path d="M12 2v2.75M12 19.25V22M4.22 4.22l1.95 1.95M17.83 17.83l1.95 1.95M2 12h2.75M19.25 12H22M4.22 19.78l1.95-1.95M17.83 6.17l1.95-1.95" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round"/>
+          </svg>
+          <svg class="theme-icon theme-icon-moon" viewBox="0 0 24 24" aria-hidden="true">
+            <path d="M20.5 14.2A8.5 8.5 0 0 1 9.8 3.5 7 7 0 1 0 20.5 14.2Z" fill="currentColor"/>
+          </svg>
+        </button>
+      </div>
+    </header>
+    <div class="progress-banner" id="progress-banner" hidden>
+      <div class="progress-banner-top">
+        <div class="progress-banner-text">
+          <span class="progress-spinner" aria-hidden="true"></span>
+          <span id="progress-message">Updating…</span>
+        </div>
+        <button type="button" class="progress-hide-btn" id="progress-hide-btn" title="Hide update progress">Hide</button>
+      </div>
+      <div class="progress-bar-track">
+        <div class="progress-bar-fill" id="progress-bar-fill" style="width: 0%"></div>
+      </div>
+      <div class="progress-detail" id="progress-detail"></div>
+    </div>
+    <main class="main-content">
+      {% block content %}{% endblock %}
+    </main>
+  </div>
+  <div class="loading-overlay" id="loading-overlay" hidden>
+    <div class="loading-card">
+      <div class="spinner"></div>
+      <p class="loading-title">Fetching job listings…</p>
+      <p class="loading-message" id="loading-message">Starting…</p>
+      <div class="loading-counts" id="loading-counts"></div>
+    </div>
+  </div>
+  <script src="{{ url_for('static', filename='js/app.js') }}"></script>
+  {% block scripts %}{% endblock %}
+</body>
+</html>

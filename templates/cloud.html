@@ -1,0 +1,85 @@
+{% extends "base.html" %}
+{% block title %}Subject cloud — Job Boards{% endblock %}
+{% block content %}
+<nav class="page-nav">
+  <a href="/" class="page-nav-link">← All jobs</a>
+</nav>
+
+<section class="cloud-header">
+  <h2 class="cloud-title">Subject areas</h2>
+  <p class="cloud-sub">
+    Terms extracted from job subject fields. Click any word or phrase to filter the main listings.
+  </p>
+  <p class="cloud-meta" id="cloud-meta">{{ terms|length }} terms · {{ total_jobs }} listings with subjects</p>
+</section>
+
+<section class="phrase-manager">
+  <h3 class="phrase-manager-title">Your phrases</h3>
+  <form class="phrase-add-form" id="phrase-add-form">
+    <input
+      type="text"
+      id="phrase-input"
+      class="phrase-input"
+      placeholder="Add a phrase to track, e.g. phylogenetic comparative methods"
+      autocomplete="off"
+    >
+    <button type="submit" class="btn btn-primary">Track phrase</button>
+  </form>
+  <div class="phrase-list-block">
+    <h4 class="phrase-list-label">Tracked</h4>
+    <div class="phrase-chip-list" id="watch-list">
+      {% if prefs.watch %}
+        {% for phrase in prefs.watch %}
+        <span class="phrase-chip phrase-chip-watch">
+          <span>{{ phrase }}</span>
+          <button type="button" class="phrase-chip-btn" data-action="unwatch" data-phrase="{{ phrase }}" title="Stop tracking">×</button>
+        </span>
+        {% endfor %}
+      {% else %}
+        <p class="phrase-empty" id="watch-empty">No tracked phrases yet.</p>
+      {% endif %}
+    </div>
+  </div>
+  <div class="phrase-list-block">
+    <h4 class="phrase-list-label">Hidden</h4>
+    <div class="phrase-chip-list" id="ignore-list">
+      {% if prefs.ignore %}
+        {% for phrase in prefs.ignore %}
+        <span class="phrase-chip phrase-chip-ignore">
+          <span>{{ phrase }}</span>
+          <button type="button" class="phrase-chip-btn" data-action="unignore" data-phrase="{{ phrase }}" title="Restore">×</button>
+        </span>
+        {% endfor %}
+      {% else %}
+        <p class="phrase-empty" id="ignore-empty">No hidden phrases.</p>
+      {% endif %}
+    </div>
+  </div>
+</section>
+
+<section class="cloud-panel" id="cloud-panel" aria-label="Subject word cloud">
+  {% if terms %}
+    {% for item in terms %}
+    <span class="cloud-term-wrap">
+      <a
+        class="cloud-term{% if item.watch %} cloud-term-watch{% endif %}"
+        href="/?kw={{ item.term | urlencode }}"
+        data-count="{{ item.count }}"
+        data-term="{{ item.term }}"
+        title="{{ item.count }} listing{{ 's' if item.count != 1 else '' }}"
+      >{{ item.term }}</a>
+      <button type="button" class="cloud-term-hide" data-action="ignore" data-phrase="{{ item.term }}" title="Hide from cloud">×</button>
+    </span>
+    {% endfor %}
+  {% else %}
+    <p class="empty-state">No subject terms found yet. Try refreshing job data or add phrases above.</p>
+  {% endif %}
+</section>
+{% endblock %}
+
+{% block scripts %}
+<script>
+  window.JobBoardsPage = "cloud";
+</script>
+<script src="{{ url_for('static', filename='js/cloud.js') }}"></script>
+{% endblock %}
