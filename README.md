@@ -1,24 +1,18 @@
 # EcoEvo Job Searcher
 
-Local app for ecology & evolution job listings from **ecoevojobs**, **EvolDir**, and **Science Careers**.
+Local app and **GitHub Pages** site for ecology & evolution job listings from **ecoevojobs**, **EvolDir**, and **Science Careers**.
+
+## Live site (GitHub Pages)
+
+**https://calcharp.github.io/EcoEvoJobSearcher/**
+
+No install needed — browse, filter, map, subject cloud, save/dismiss jobs (stored in your browser).
+
+Listings refresh when the **Deploy GitHub Pages** workflow runs (daily at noon UTC, or manually from the Actions tab). First-time setup: repo **Settings → Pages → Build and deployment → Source: GitHub Actions**.
+
+## Local app
 
 Opens your default browser, scrapes on launch, and keeps everything in a local SQLite database. Close the browser tab to exit.
-
-## Download (easiest)
-
-Pre-built executables are attached to [GitHub Releases](https://github.com/calcharp/EcoEvoJobSearcher/releases):
-
-| Platform | Download |
-|----------|----------|
-| Windows | `JobBoards-windows-x64.zip` → run `JobBoards.exe` |
-| macOS (Apple Silicon) | `JobBoards-macos-arm64.zip` → run `JobBoards` |
-| Linux | `JobBoards-linux-x64.zip` → run `./JobBoards` |
-
-On macOS/Linux you may need to mark the binary executable (`chmod +x JobBoards`). Unsigned macOS builds may require right-click → Open the first time.
-
-## Run from source
-
-Requires **Python 3.10+**.
 
 ```bash
 git clone https://github.com/calcharp/EcoEvoJobSearcher.git
@@ -27,9 +21,17 @@ pip install -r requirements.txt
 python main.py
 ```
 
-## Build your own executable
+## Download executable
 
-One command after cloning (use a **virtual environment** for a smaller binary — ~20–30 MB vs 70+ MB from a bloated system Python):
+Pre-built binaries are on [GitHub Releases](https://github.com/calcharp/EcoEvoJobSearcher/releases):
+
+| Platform | Download |
+|----------|----------|
+| Windows | `JobBoards-windows-x64.zip` → run `JobBoards.exe` |
+| macOS (Apple Silicon) | `JobBoards-macos-arm64.zip` → run `JobBoards` |
+| Linux | `JobBoards-linux-x64.zip` → run `./JobBoards` |
+
+## Build executable locally
 
 ```bash
 python -m venv .venv
@@ -40,32 +42,33 @@ pip install -r requirements.txt
 python build.py
 ```
 
-Output lands in `dist/` (`JobBoards.exe` on Windows, `JobBoards` elsewhere). The script installs PyInstaller automatically if needed.
+## Build static site locally
 
-Manual build:
-
-```bash
-pip install -r requirements.txt -r requirements-build.txt
-pyinstaller JobBoards.spec --noconfirm --clean
-```
-
-## Publishing releases (maintainers)
-
-Tag a version to build all three platforms and attach zips to a GitHub Release:
+Reuses your local `jobs.db` (or scrapes fresh if omitted):
 
 ```bash
-git tag v1.0.0
-git push origin v1.0.0
+pip install -r requirements.txt
+python scripts/publish_static.py --out _site --base-path ./
+# Preview: python -m http.server 8080 --directory _site
 ```
 
-Or run the **Release** workflow manually from the Actions tab.
+Options: `--no-scrape` (use existing DB), `--geocode-limit 0` (skip geocoding for a quick test).
+
+## Maintainer workflows
+
+| Workflow | Trigger | Output |
+|----------|---------|--------|
+| **Deploy GitHub Pages** | Push to `main`, daily schedule, manual | Live site |
+| **Release** | Tag `v*` | Windows / macOS / Linux zips |
 
 ## Data storage
+
+**Local app** — SQLite:
 
 | Platform | Location |
 |----------|----------|
 | Windows | `%LOCALAPPDATA%\JobBoards\jobs.db` |
 | macOS | `~/Library/Application Support/JobBoards/jobs.db` |
-| Linux | `~/.local/share/JobBoards/jobs.db` (or `$XDG_DATA_HOME/JobBoards`) |
+| Linux | `~/.local/share/JobBoards/jobs.db` |
 
-Saved jobs, dismissed listings, and saved searches live in the same database.
+**GitHub Pages** — saved/dismissed jobs and saved searches use `localStorage` in your browser only.

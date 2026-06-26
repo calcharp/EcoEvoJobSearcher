@@ -1,0 +1,22 @@
+{% extends "base.html" %}
+{% block title %}Job detail — Eco &amp; Evo Jobs{% endblock %}
+{% block head %}
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" crossorigin="">
+{% endblock %}
+{% block content %}
+<nav class="breadcrumb">
+  <a href="{{ base_path }}index.html">← All jobs</a>
+</nav>
+<article class="job-detail" id="job-detail-root">
+  <p class="empty-state">Loading job…</p>
+</article>
+{% endblock %}
+
+{% block scripts %}
+<script>
+  window.JobBoardsPage = "detail";
+</script>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" crossorigin=""></script>
+<script src="{{ base_path }}static/js/job-map.js"></script>
+<script src="{{ base_path }}static/js/job-detail-static.js"></script>
+{% endblock %}

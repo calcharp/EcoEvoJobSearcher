@@ -80,7 +80,7 @@
       <span class="cloud-term-wrap">
         <a
           class="cloud-term${item.watch ? " cloud-term-watch" : ""}"
-          href="/?kw=${encodeURIComponent(item.term)}"
+          href="${window.JobBoardsStatic ? JobBoardsPageUrl("index.html?kw=" + encodeURIComponent(item.term)) : "/?kw=" + encodeURIComponent(item.term)}"
           data-count="${item.count}"
           data-term="${esc(item.term)}"
           title="${item.count} listing${item.count === 1 ? "" : "s"}"
@@ -92,7 +92,17 @@
     sizeCloudTerms();
   }
 
+  let cloudTermsCache = [];
+
   async function mutatePhrase(action, phrase) {
+    if (window.JobBoardsStatic && window.JobBoardsStore) {
+      const prefs = JobBoardsStore.updatePhrasePrefs(action, phrase);
+      return {
+        prefs,
+        terms: JobBoardsStaticQuery.filterCloudTerms(cloudTermsCache, prefs),
+        total_jobs: cloudTermsCache._totalJobs || 0,
+      };
+    }
     const res = await fetch("/api/subject-phrases", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -146,5 +156,28 @@
     });
   }
 
-  sizeCloudTerms();
+  async function loadStaticCloud() {
+    if (!window.JobBoardsStatic) return;
+    try {
+      const res = await fetch(JobBoardsDataUrl("subject-cloud.json"), { cache: "no-store" });
+      const data = await res.json();
+      cloudTermsCache = data.terms || [];
+      cloudTermsCache._totalJobs = data.total_jobs || 0;
+      const prefs = JobBoardsStore.getPhrasePrefs();
+      renderChipList(watchList, prefs.watch, "watch", "No tracked phrases yet.");
+      renderChipList(ignoreList, prefs.ignore, "ignore", "No hidden phrases.");
+      renderCloud(JobBoardsStaticQuery.filterCloudTerms(cloudTermsCache, prefs));
+      if (cloudMeta) {
+        cloudMeta.textContent = `${data.terms.length} terms · ${data.total_jobs} listings with subjects`;
+      }
+    } catch {
+      if (panel) panel.innerHTML = '<p class="empty-state">Could not load subject terms.</p>';
+    }
+  }
+
+  if (window.JobBoardsStatic) {
+    document.addEventListener("DOMContentLoaded", loadStaticCloud);
+  } else {
+    sizeCloudTerms();
+  }
 })();

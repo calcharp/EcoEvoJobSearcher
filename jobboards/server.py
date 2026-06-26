@@ -12,6 +12,7 @@ from jobboards.db import get_job, init_db, job_date_bounds, job_stats, list_jobs
 from jobboards.embed import can_preview, preview_target, render_preview
 from jobboards.geocode import geo_stats, get_job_geo, list_map_jobs
 from jobboards.scrape.runner import ScrapeState, build_progress_detail, compute_progress_percent, run_scrape_async
+from jobboards.subjects import get_phrase_prefs, subject_term_counts, update_phrase_prefs
 from jobboards.user_data import (
     attach_user_flags,
     delete_saved_search,

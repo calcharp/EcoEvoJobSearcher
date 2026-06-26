@@ -93,6 +93,12 @@ a:hover { text-decoration: underline; }
   flex-wrap: wrap;
 }
 
+.static-site-note {
+  margin: -0.75rem 0 1.25rem;
+  font-size: 0.82rem;
+  color: var(--text-muted);
+}
+
 .brand { display: flex; align-items: center; gap: 0.875rem; }
 
 .brand-icon {

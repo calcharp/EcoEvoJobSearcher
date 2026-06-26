@@ -1,4 +1,5 @@
 (function () {
+  const isStatic = !!window.JobBoardsStatic;
   const HEARTBEAT_MS = 3000;
   const POLL_MS_RUNNING = 800;
   const POLL_MS_IDLE = 3000;
@@ -11,12 +12,21 @@
     navigator.sendBeacon("/api/shutdown", "");
   }
 
-  sendHeartbeat();
-  setInterval(sendHeartbeat, HEARTBEAT_MS);
-  window.addEventListener("pagehide", (e) => {
-    if (e.persisted) return;
-    sendShutdown();
-  });
+  if (!isStatic) {
+    sendHeartbeat();
+    setInterval(sendHeartbeat, HEARTBEAT_MS);
+    window.addEventListener("pagehide", (e) => {
+      if (e.persisted) return;
+      sendShutdown();
+    });
+  }
+
+  function jobDetailHref(jobId) {
+    if (window.JobBoardsStatic) {
+      return JobBoardsPageUrl(`job.html?id=${encodeURIComponent(jobId)}`);
+    }
+    return `/jobs/${jobId}`;
+  }
 
   const overlay = document.getElementById("loading-overlay");
   const loadingMsg = document.getElementById("loading-message");
@@ -142,7 +152,7 @@
 
     return `
       <div class="job-card-wrap" data-job-id="${esc(job.id)}">
-        <a class="job-card" href="/jobs/${job.id}">
+        <a class="job-card" href="${jobDetailHref(job.id)}">
           <div class="job-card-top">
             <div>
               <h3 class="job-card-title">${esc(job.subject_area || job.title || job.institution)}</h3>
@@ -256,6 +266,12 @@
   }
 
   async function refreshUserData() {
+    if (window.JobBoardsStatic && window.JobBoardsStore) {
+      const data = JobBoardsStore.userDataSnapshot();
+      savedSearches = data.saved_searches || [];
+      renderSavedSearchSelect();
+      return data;
+    }
     try {
       const res = await fetch("/api/user-data", { cache: "no-store" });
       const data = await res.json();
@@ -312,6 +328,22 @@
     const name = window.prompt("Name this search:");
     if (!name || !name.trim()) return;
     try {
+      if (window.JobBoardsStatic && window.JobBoardsStore) {
+        const entry = {
+          id: crypto.randomUUID ? crypto.randomUUID() : String(Date.now()),
+          name: name.trim(),
+          payload: buildSearchPayload(),
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+        };
+        savedSearches = JobBoardsStore.saveSearch(entry);
+        renderSavedSearchSelect();
+        const sel = document.getElementById("saved-search-select");
+        if (sel) sel.value = entry.id;
+        const delBtn = document.getElementById("delete-search-btn");
+        if (delBtn) delBtn.hidden = false;
+        return;
+      }
       const res = await fetch("/api/saved-searches", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -338,6 +370,12 @@
     if (!sel?.value) return;
     if (!window.confirm("Delete this saved search?")) return;
     try {
+      if (window.JobBoardsStatic && window.JobBoardsStore) {
+        savedSearches = JobBoardsStore.deleteSavedSearch(sel.value);
+        sel.value = "";
+        renderSavedSearchSelect();
+        return;
+      }
       const res = await fetch("/api/saved-searches", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -354,6 +392,25 @@
   }
 
   async function mutateSavedJob(jobId, save) {
+    if (window.JobBoardsStatic && window.JobBoardsStore) {
+      if (save) JobBoardsStore.saveJob(jobId);
+      else JobBoardsStore.unsaveJob(jobId);
+      const job = allJobsCache.find((j) => j.id === jobId);
+      if (job) job.is_saved = save;
+      if (currentView() === "saved" && !save) {
+        scheduleReloadResults({ quiet: true });
+        return;
+      }
+      const btn = document.querySelector(`.job-card-wrap[data-job-id="${jobId}"] .job-card-save`);
+      if (btn) {
+        btn.classList.toggle("is-saved", save);
+        btn.textContent = save ? "★" : "☆";
+        btn.title = save ? "Unsave job" : "Save job";
+        btn.setAttribute("aria-label", save ? "Unsave job" : "Save job");
+      }
+      if (currentView() === "saved") applyDisplay();
+      return;
+    }
     const res = await fetch("/api/saved-jobs", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -377,6 +434,12 @@
   }
 
   async function mutateDismissedJob(jobId, dismiss) {
+    if (window.JobBoardsStatic && window.JobBoardsStore) {
+      if (dismiss) JobBoardsStore.dismissJob(jobId);
+      else JobBoardsStore.restoreJob(jobId);
+      scheduleReloadResults({ quiet: true });
+      return;
+    }
     const res = await fetch("/api/dismissed-jobs", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -520,28 +583,77 @@
     return out;
   }
 
+  function getStaticFilterOpts() {
+    const stack = window.JobBoardsFilters?.getStack() || [];
+    const terms = [];
+    let dateRange = null;
+    for (const f of stack) {
+      if (f.type === "search" || f.type === "keyword") terms.push(f.value);
+      if (f.type === "date") {
+        dateRange = {
+          field: f.field === "apply_by" ? "apply_by" : "posted_at",
+          from: f.from || "",
+          to: f.to || "",
+        };
+      }
+    }
+    return {
+      source: document.getElementById("source-filter")?.value || "all",
+      sort: document.getElementById("sort-filter")?.value || "posted_at",
+      order: document.getElementById("order-filter")?.value || "desc",
+      view: currentView(),
+      terms,
+      dateRange: dateRange && (dateRange.from || dateRange.to) ? dateRange : null,
+      savedIds: JobBoardsStore.getSavedJobIds(),
+      dismissedIds: JobBoardsStore.getDismissedJobIds(),
+    };
+  }
+
+  function getMapJobsForList() {
+    if (!window.JobBoardsStatic) return allMapJobsCache;
+    const area = window.JobBoardsFilters?.getAreaFilter();
+    const visibleIds = new Set(
+      JobBoardsStaticQuery.filterJobs(allJobsCache, getStaticFilterOpts()).map((j) => j.id)
+    );
+    let jobs = allMapJobsCache.filter((j) => visibleIds.has(j.id));
+    if (area?.bounds) {
+      const b = area.bounds;
+      jobs = jobs.filter(
+        (j) => b.south <= j.lat && j.lat <= b.north && b.west <= j.lon && j.lon <= b.east
+      );
+    }
+    return jobs;
+  }
+
   function listJobsForDisplay() {
-    let jobs = applyClientStackFilters(allJobsCache);
-    const view = currentView();
-    if (view === "saved") {
-      jobs = jobs.filter((j) => j.is_saved);
-    } else if (view === "dismissed") {
-      jobs = jobs.filter((j) => j.is_dismissed);
+    let jobs;
+    if (window.JobBoardsStatic && window.JobBoardsStaticQuery) {
+      jobs = JobBoardsStaticQuery.filterJobs(allJobsCache, getStaticFilterOpts());
+    } else {
+      jobs = applyClientStackFilters(allJobsCache);
+      const view = currentView();
+      if (view === "saved") {
+        jobs = jobs.filter((j) => j.is_saved);
+      } else if (view === "dismissed") {
+        jobs = jobs.filter((j) => j.is_dismissed);
+      }
     }
 
     if (!window.JobBoardsFilters?.getAreaFilter()) {
       return jobs;
     }
-    const ids = new Set(allMapJobsCache.map((j) => j.id));
+    const ids = new Set(getMapJobsForList().map((j) => j.id));
     return jobs.filter((j) => ids.has(j.id));
   }
 
   function updateMapFootnote() {
     const footnote = document.getElementById("map-footnote");
     if (!footnote) return;
-    const mapped = allMapJobsCache.length;
+    const mapped = window.JobBoardsStatic ? getMapJobsForList().length : allMapJobsCache.length;
     const missing = mapStats.missing;
-    const filteredTotal = allJobsCache.length;
+    const filteredTotal = window.JobBoardsStatic
+      ? JobBoardsStaticQuery.filterJobs(allJobsCache, getStaticFilterOpts()).length
+      : allJobsCache.length;
     const filterCount = window.JobBoardsFilters?.getStack().length || 0;
     const filterNote = filterCount
       ? ` · ${filterCount} active filter${filterCount === 1 ? "" : "s"}`
@@ -587,7 +699,7 @@
 
     if (mapCtrl) {
       const focusId = opts.focusId || new URLSearchParams(window.location.search).get("focus");
-      mapCtrl.setMarkers(allMapJobsCache, {
+      mapCtrl.setMarkers(window.JobBoardsStatic ? getMapJobsForList() : allMapJobsCache, {
         focusId: focusId || undefined,
         skipFit: !!(hasArea || focusId),
       });
@@ -627,7 +739,80 @@
     }, delay);
   }
 
+  async function loadStaticDatasets() {
+    const [jobsRes, mapRes, metaRes] = await Promise.all([
+      fetch(JobBoardsDataUrl("jobs.json"), { cache: "no-store" }),
+      fetch(JobBoardsDataUrl("map-jobs.json"), { cache: "no-store" }),
+      fetch(JobBoardsDataUrl("meta.json"), { cache: "no-store" }),
+    ]);
+    if (!jobsRes.ok) throw new Error("jobs fetch failed");
+    const jobsData = await jobsRes.json();
+    const mapData = mapRes.ok ? await mapRes.json() : { jobs: [], mapped: 0, missing: 0 };
+    const meta = metaRes.ok ? await metaRes.json() : {};
+    updateStats(jobsData.stats || meta.stats || {});
+    if (lastUpdated && (meta.last_fetched_at || jobsData.stats?.last_fetched_at)) {
+      lastUpdated.textContent = formatLastUpdated(meta.last_fetched_at || jobsData.stats.last_fetched_at);
+    }
+    const note = document.getElementById("static-site-note");
+    if (note && meta.generated_at) {
+      note.textContent = `Static site · listings updated ${formatLastUpdated(meta.generated_at)}`;
+    }
+    allJobsCache = JobBoardsStore.attachUserFlags(jobsData.jobs || []);
+    allMapJobsCache = mapData.jobs || [];
+    mapStats = {
+      mapped: mapData.mapped || allMapJobsCache.length,
+      missing: mapData.missing || 0,
+      filteredTotal: allJobsCache.length,
+    };
+    jobsLoadedOnce = true;
+    hasCache = allJobsCache.length > 0;
+  }
+
+  async function reloadResultsStatic(opts = {}) {
+    const list = document.getElementById("jobs-list");
+    const footnote = document.getElementById("map-footnote");
+    if (!list || window.JobBoardsPage !== "index") return;
+
+    if (resultsInFlight) {
+      pendingReloadOpts = { ...(pendingReloadOpts || {}), ...opts };
+      return;
+    }
+
+    const quiet = opts.quiet === true;
+    const hasArea = !!window.JobBoardsFilters?.getAreaFilter();
+
+    if (!quiet && !list.querySelector(".job-card")) {
+      list.innerHTML = '<p class="empty-state">Loading jobs…</p>';
+      updateResultCount(null, true);
+    } else if (!quiet) {
+      updateResultCount(listJobsForDisplay().length);
+    }
+
+    if (opts.resetFit && mapCtrl && !hasArea) mapCtrl.resetFit();
+
+    resultsInFlight = true;
+    try {
+      if (!jobsLoadedOnce) await loadStaticDatasets();
+      JobBoardsStore.attachUserFlags(allJobsCache);
+      applyDisplay({ focusId: opts.focusId });
+    } catch {
+      list.innerHTML = '<p class="empty-state">Failed to load jobs.</p>';
+      if (footnote) footnote.textContent = "Failed to load map data.";
+      updateResultCount(0);
+    } finally {
+      resultsInFlight = false;
+      if (pendingReloadOpts) {
+        const next = pendingReloadOpts;
+        pendingReloadOpts = null;
+        scheduleReloadResults(next);
+      }
+    }
+  }
+
   async function reloadResults(opts = {}) {
+    if (window.JobBoardsStatic) {
+      return reloadResultsStatic(opts);
+    }
     const list = document.getElementById("jobs-list");
     const footnote = document.getElementById("map-footnote");
     if (!list || window.JobBoardsPage !== "index") return;
@@ -835,7 +1020,9 @@
     });
     wireJobsListMapEvents();
     restoreMapAreaFromFilters();
-    setInterval(() => scheduleReloadResults({ quiet: true }), 45000);
+    if (!window.JobBoardsStatic) {
+      setInterval(() => scheduleReloadResults({ quiet: true }), 45000);
+    }
   }
 
   function initDetailMap() {
@@ -847,6 +1034,13 @@
   }
 
   function applyScrapeUI(data) {
+    if (window.JobBoardsStatic) {
+      if (data?.stats) updateStats(data.stats);
+      if (data?.last_fetched_at && lastUpdated) {
+        lastUpdated.textContent = formatLastUpdated(data.last_fetched_at);
+      }
+      return;
+    }
     const active = !!data.running || ["starting", "ecoevojobs", "evoldir", "sciencecareers"].includes(data.phase);
     scrapeRunning = active;
     if (active) {
@@ -896,6 +1090,7 @@
   }
 
   function startStatusPolling() {
+    if (window.JobBoardsStatic) return;
     if (pollTimer) return;
     pollStatus();
   }
@@ -939,7 +1134,7 @@
   const searchInput = document.getElementById("search-input");
   if (searchInput) {
     searchInput.addEventListener("keydown", (e) => {
-      if (e.key !== "Enter" || scrapeRunning || !window.JobBoardsFilters) return;
+      if (e.key !== "Enter" || (!window.JobBoardsStatic && scrapeRunning) || !window.JobBoardsFilters) return;
       e.preventDefault();
       const val = searchInput.value.trim();
       if (!val) return;
@@ -949,6 +1144,18 @@
   }
 
   document.addEventListener("DOMContentLoaded", () => {
+    if (window.JobBoardsStatic) {
+      if (progressBanner) progressBanner.hidden = true;
+      if (overlay) overlay.hidden = true;
+      if (window.JobBoardsFilters) {
+        const origToUrl = JobBoardsFilters.toUrl.bind(JobBoardsFilters);
+        JobBoardsFilters.toUrl = function () {
+          const raw = origToUrl();
+          const qs = raw.startsWith("/?") ? raw.slice(2) : raw.replace(/^\//, "");
+          return qs ? JobBoardsPageUrl(`index.html?${qs}`) : JobBoardsPageUrl("index.html");
+        };
+      }
+    }
     if (window.JobBoardsPage === "index") {
       startStatusPolling();
       refreshUserData();
@@ -971,12 +1178,19 @@
       document.getElementById("view-filter")?.addEventListener("change", onViewFilterChange);
       document.getElementById("export-csv-btn")?.addEventListener("click", exportVisibleJobsCsv);
     }
-    if (window.JobBoardsPage === "detail") initDetailMap();
+    if (window.JobBoardsPage === "detail" && !window.JobBoardsStatic) initDetailMap();
     if (window.JobBoardsPage !== "index") {
-      fetch("/api/status", { cache: "no-store" })
-        .then((r) => r.json())
-        .then(applyScrapeUI)
-        .catch(() => {});
+      if (window.JobBoardsStatic) {
+        fetch(JobBoardsDataUrl("meta.json"), { cache: "no-store" })
+          .then((r) => r.json())
+          .then((meta) => applyScrapeUI({ stats: meta.stats, last_fetched_at: meta.last_fetched_at }))
+          .catch(() => {});
+      } else {
+        fetch("/api/status", { cache: "no-store" })
+          .then((r) => r.json())
+          .then(applyScrapeUI)
+          .catch(() => {});
+      }
     }
   });
 })();

@@ -355,7 +355,10 @@
 
     async function init() {
       try {
-        const res = await fetch("/api/date-bounds");
+        const url = window.JobBoardsStatic
+          ? JobBoardsDataUrl("date-bounds.json")
+          : "/api/date-bounds";
+        const res = await fetch(url);
         bounds = await res.json();
       } catch {
         bounds = {};

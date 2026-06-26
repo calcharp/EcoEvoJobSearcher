@@ -1,0 +1,184 @@
+"""Build a static site bundle for GitHub Pages."""
+
+from __future__ import annotations
+
+import json
+import os
+import shutil
+from datetime import datetime, timezone
+from pathlib import Path
+from typing import Any
+
+from jobboards.db import init_db, job_date_bounds, job_stats, list_jobs
+from jobboards.dates import days_until, format_display
+from jobboards.embed import can_preview, preview_target
+from jobboards.geocode import get_job_geo, list_map_jobs, run_geocode_batch
+from jobboards.notes import parse_notes_thread
+from jobboards.scrape.runner import ScrapeState, scrape_all
+from jobboards.subjects import subject_term_counts
+
+ROOT = Path(__file__).resolve().parent.parent
+
+
+def pages_base_path() -> str:
+    if os.environ.get("GITHUB_ACTIONS"):
+        repo = os.environ.get("GITHUB_REPOSITORY", "calcharp/EcoEvoJobSearcher")
+        name = repo.split("/", 1)[-1]
+        return f"/{name}/"
+    return "./"
+
+
+def enrich_export_job(job: dict[str, Any], include_detail: bool = False) -> dict[str, Any]:
+    job = dict(job)
+    job["posted_display"] = format_display(job.get("posted_at"), include_time=True)
+    job["apply_display"] = format_display(job.get("apply_by"))
+    job["updated_display"] = format_display(job.get("updated_at"), include_time=True)
+    job["days_until"] = days_until(job.get("apply_by"))
+
+    notes_raw = job.get("notes_raw") or ""
+    thread_json = job.get("notes_thread_json")
+    if thread_json:
+        try:
+            job["notes_thread"] = json.loads(thread_json)
+        except json.JSONDecodeError:
+            job["notes_thread"] = parse_notes_thread(notes_raw)
+    else:
+        job["notes_thread"] = parse_notes_thread(notes_raw)
+    job["has_notes_thread"] = len(job["notes_thread"]) > 1
+
+    geo = get_job_geo(job.get("institution", ""), job.get("location"))
+    if geo:
+        job["map_geo"] = {
+            "id": job["id"],
+            "institution": job.get("institution"),
+            "location": job.get("location"),
+            "subject_area": job.get("subject_area"),
+            "lat": geo["lat"],
+            "lon": geo["lon"],
+            "geo_precision": geo["geo_precision"],
+        }
+
+    if include_detail:
+        _, open_url = preview_target(job)
+        job["preview_open_url"] = open_url
+        job["has_preview"] = can_preview(job)
+    else:
+        job.pop("description_raw", None)
+        job.pop("notes_raw", None)
+        job.pop("notes_thread_json", None)
+
+    return job
+
+
+def geocode_pending_loop(max_places: int = 600) -> int:
+    total = 0
+    while total < max_places:
+        batch = min(40, max_places - total)
+        done = run_geocode_batch(max_places=batch)
+        if done == 0:
+            break
+        total += done
+    return total
+
+
+def write_json(path: Path, payload: Any) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(payload, ensure_ascii=False), encoding="utf-8")
+
+
+def copy_static_assets(out_dir: Path) -> None:
+    src = ROOT / "static"
+    dst = out_dir / "static"
+    if dst.exists():
+        shutil.rmtree(dst)
+    shutil.copytree(src, dst)
+
+
+def render_site_pages(out_dir: Path, base_path: str, stats: dict[str, Any]) -> None:
+  from jinja2 import Environment, FileSystemLoader, select_autoescape
+
+  env = Environment(
+      loader=FileSystemLoader(str(ROOT / "templates" / "static_site")),
+      autoescape=select_autoescape(["html", "xml"]),
+  )
+  env.globals["base_path"] = base_path
+  env.globals["stats"] = stats
+
+  pages = {
+      "index.html": env.get_template("index.html").render(active_page="index", stats=stats),
+      "subjects.html": env.get_template("subjects.html").render(active_page="subjects", stats=stats),
+      "job.html": env.get_template("job.html").render(active_page="job", stats=stats),
+      "404.html": env.get_template("404.html").render(active_page="", stats=stats),
+  }
+  for name, html in pages.items():
+      (out_dir / name).write_text(html, encoding="utf-8")
+
+
+def publish(
+    out_dir: Path,
+    *,
+    base_path: str | None = None,
+    scrape: bool = True,
+    geocode_limit: int = 600,
+) -> dict[str, Any]:
+    base_path = base_path if base_path is not None else pages_base_path()
+    out_dir = out_dir.resolve()
+    if out_dir.exists():
+        shutil.rmtree(out_dir)
+    out_dir.mkdir(parents=True)
+
+    init_db()
+    if scrape:
+        state = ScrapeState()
+        started = datetime.now(timezone.utc).replace(microsecond=0).isoformat()
+        state.update(phase="starting", message="Scraping sources…", started_at=started)
+        scrape_all(state)
+        if state.error:
+            raise RuntimeError(state.error)
+
+    if geocode_limit > 0:
+        geocode_pending_loop(geocode_limit)
+
+    all_jobs = list_jobs(sort="posted_at", order="desc")
+    export_jobs = [enrich_export_job(job, include_detail=True) for job in all_jobs]
+    for job in export_jobs:
+        job["is_saved"] = False
+        job["is_dismissed"] = False
+
+    mapped, missing = list_map_jobs(sort="posted_at", order="desc")
+    stats = job_stats()
+    bounds = job_date_bounds()
+    terms = subject_term_counts(min_count=2)
+    generated_at = datetime.now(timezone.utc).replace(microsecond=0).isoformat()
+
+    data_dir = out_dir / "data"
+    write_json(data_dir / "meta.json", {
+        "generated_at": generated_at,
+        "last_fetched_at": stats.get("last_fetched_at"),
+        "stats": stats,
+        "map_summary": {"mapped": len(mapped), "missing": missing, "filtered_total": len(all_jobs)},
+    })
+    write_json(data_dir / "jobs.json", {"jobs": export_jobs, "stats": stats})
+    write_json(data_dir / "map-jobs.json", {
+        "jobs": mapped,
+        "mapped": len(mapped),
+        "missing": missing,
+        "filtered_total": len(all_jobs),
+    })
+    write_json(data_dir / "date-bounds.json", bounds)
+    write_json(data_dir / "subject-cloud.json", {
+        "terms": terms,
+        "total_jobs": stats.get("total", 0),
+    })
+
+    copy_static_assets(out_dir)
+    render_site_pages(out_dir, base_path, stats)
+    (out_dir / ".nojekyll").write_text("", encoding="utf-8")
+
+    return {
+        "out_dir": str(out_dir),
+        "base_path": base_path,
+        "jobs": len(export_jobs),
+        "mapped": len(mapped),
+        "generated_at": generated_at,
+    }

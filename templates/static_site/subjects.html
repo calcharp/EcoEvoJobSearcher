@@ -1,0 +1,52 @@
+{% extends "base.html" %}
+{% block title %}Subject cloud — Eco &amp; Evo Jobs{% endblock %}
+{% block content %}
+<nav class="page-nav">
+  <a href="{{ base_path }}index.html" class="page-nav-link">← All jobs</a>
+</nav>
+
+<section class="cloud-header">
+  <h2 class="cloud-title">Subject areas</h2>
+  <p class="cloud-sub">
+    Terms extracted from job subject fields. Click any word or phrase to filter the main listings.
+  </p>
+  <p class="cloud-meta" id="cloud-meta">Loading…</p>
+</section>
+
+<section class="phrase-manager">
+  <h3 class="phrase-manager-title">Your phrases</h3>
+  <form class="phrase-add-form" id="phrase-add-form">
+    <input
+      type="text"
+      id="phrase-input"
+      class="phrase-input"
+      placeholder="Add a phrase to track, e.g. phylogenetic comparative methods"
+      autocomplete="off"
+    >
+    <button type="submit" class="btn btn-primary">Track phrase</button>
+  </form>
+  <div class="phrase-list-block">
+    <h4 class="phrase-list-label">Tracked</h4>
+    <div class="phrase-chip-list" id="watch-list">
+      <p class="phrase-empty" id="watch-empty">No tracked phrases yet.</p>
+    </div>
+  </div>
+  <div class="phrase-list-block">
+    <h4 class="phrase-list-label">Hidden</h4>
+    <div class="phrase-chip-list" id="ignore-list">
+      <p class="phrase-empty" id="ignore-empty">No hidden phrases.</p>
+    </div>
+  </div>
+</section>
+
+<section class="cloud-panel" id="cloud-panel" aria-label="Subject word cloud">
+  <p class="empty-state">Loading subject terms…</p>
+</section>
+{% endblock %}
+
+{% block scripts %}
+<script>
+  window.JobBoardsPage = "cloud";
+</script>
+<script src="{{ base_path }}static/js/cloud.js"></script>
+{% endblock %}

@@ -7,3 +7,5 @@ build/
 .venv/
 venv/
 plan.md
+docs/
+_site/
