@@ -30,23 +30,24 @@
 }
 
 [data-theme="light"] {
-  --bg-deep: #eef2f6;
-  --bg-surface: #ffffff;
-  --bg-elevated: #f7f9fb;
-  --bg-card: #ffffff;
-  --border: rgba(15, 23, 35, 0.08);
-  --border-strong: rgba(15, 23, 35, 0.14);
-  --text: #1a2430;
-  --text-muted: #5a6b7d;
-  --text-faint: #8a98a8;
-  --accent-dim: rgba(36, 160, 110, 0.12);
-  --accent-glow: rgba(36, 160, 110, 0.22);
-  --amber-dim: rgba(200, 140, 20, 0.12);
-  --rose-dim: rgba(200, 70, 80, 0.1);
-  --blue-dim: rgba(50, 120, 200, 0.1);
-  --shadow: 0 8px 28px rgba(15, 23, 35, 0.08);
-  --shadow-md: 0 4px 14px rgba(15, 23, 35, 0.07);
-  --map-bg: #dfe6ee;
+  --bg-deep: #f0ebe2;
+  --bg-surface: #faf6ef;
+  --bg-elevated: #f3ede4;
+  --bg-card: #f7f2ea;
+  --border: rgba(62, 52, 42, 0.1);
+  --border-strong: rgba(62, 52, 42, 0.16);
+  --text: #2c2620;
+  --text-muted: #6b6358;
+  --text-faint: #948c80;
+  --accent: #2a9d6a;
+  --accent-dim: rgba(42, 157, 106, 0.14);
+  --accent-glow: rgba(42, 157, 106, 0.24);
+  --amber-dim: rgba(180, 130, 30, 0.14);
+  --rose-dim: rgba(190, 75, 85, 0.1);
+  --blue-dim: rgba(55, 110, 175, 0.1);
+  --shadow: 0 8px 28px rgba(62, 52, 42, 0.07);
+  --shadow-md: 0 4px 14px rgba(62, 52, 42, 0.06);
+  --map-bg: #e6dfd4;
 }
 
 *, *::before, *::after { box-sizing: border-box; }
@@ -67,8 +68,8 @@ body {
 
 [data-theme="light"] body {
   background-image:
-    radial-gradient(ellipse 80% 50% at 50% -20%, rgba(36, 160, 110, 0.08), transparent),
-    radial-gradient(ellipse 60% 40% at 100% 100%, rgba(50, 120, 200, 0.05), transparent);
+    radial-gradient(ellipse 80% 50% at 50% -20%, rgba(180, 140, 80, 0.07), transparent),
+    radial-gradient(ellipse 60% 40% at 100% 100%, rgba(42, 157, 106, 0.05), transparent);
 }
 
 a { color: var(--accent); text-decoration: none; }
@@ -704,11 +705,11 @@ a:hover { text-decoration: underline; }
 }
 
 [data-theme="light"] .date-notch-mark {
-  background: rgba(15, 23, 35, 0.12);
+  background: rgba(62, 52, 42, 0.14);
 }
 
 [data-theme="light"] .date-notch-major .date-notch-mark {
-  background: rgba(15, 23, 35, 0.22);
+  background: rgba(62, 52, 42, 0.24);
 }
 
 .date-notch-label {
@@ -875,16 +876,16 @@ a.active-filter-clear:hover {
 }
 
 [data-theme="light"] .jobs-list {
-  scrollbar-color: rgba(15, 23, 35, 0.2) transparent;
+  scrollbar-color: rgba(62, 52, 42, 0.22) transparent;
 }
 
 [data-theme="light"] .jobs-list::-webkit-scrollbar-thumb {
-  background: rgba(15, 23, 35, 0.16);
+  background: rgba(62, 52, 42, 0.18);
   background-clip: padding-box;
 }
 
 [data-theme="light"] .jobs-list::-webkit-scrollbar-thumb:hover {
-  background: rgba(15, 23, 35, 0.28);
+  background: rgba(62, 52, 42, 0.3);
   background-clip: padding-box;
 }
 
@@ -1578,7 +1579,7 @@ a.active-filter-clear:hover {
   width: 100%;
   height: min(70vh, 640px);
   border: 0;
-  background: #fff;
+  background: var(--bg-surface);
 }
 
 @media (max-width: 960px) {
