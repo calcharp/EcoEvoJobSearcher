@@ -25,6 +25,8 @@
   --font: "Segoe UI", system-ui, -apple-system, sans-serif;
   --mono: "Cascadia Code", "Consolas", monospace;
   --layout-split: minmax(0, 1fr) minmax(320px, 1fr);
+  --index-map-height: min(calc(100vh - 14rem), 720px);
+  --index-panel-footer: 2.6rem;
 }
 
 [data-theme="light"] {
@@ -838,7 +840,57 @@ a.active-filter-clear:hover {
 .select:focus { outline: none; border-color: var(--accent); }
 
 /* Job cards */
-.jobs-list { display: flex; flex-direction: column; gap: 0.65rem; }
+.jobs-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.65rem;
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 0.65rem 0.45rem 0.75rem 0.85rem;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 255, 255, 0.16) transparent;
+}
+
+.jobs-list::-webkit-scrollbar {
+  width: 10px;
+}
+
+.jobs-list::-webkit-scrollbar-track {
+  background: transparent;
+  margin: 0.35rem 0;
+}
+
+.jobs-list::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.12);
+  border: 2px solid transparent;
+  border-radius: 999px;
+  background-clip: padding-box;
+}
+
+.jobs-list::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.22);
+  background-clip: padding-box;
+}
+
+[data-theme="light"] .jobs-list {
+  scrollbar-color: rgba(15, 23, 35, 0.2) transparent;
+}
+
+[data-theme="light"] .jobs-list::-webkit-scrollbar-thumb {
+  background: rgba(15, 23, 35, 0.16);
+  background-clip: padding-box;
+}
+
+[data-theme="light"] .jobs-list::-webkit-scrollbar-thumb:hover {
+  background: rgba(15, 23, 35, 0.28);
+  background-clip: padding-box;
+}
+
+.jobs-panel .job-card {
+  background: var(--bg-elevated);
+}
 
 .job-card-wrap {
   position: relative;
@@ -1196,27 +1248,31 @@ a.active-filter-clear:hover {
   display: grid;
   grid-template-columns: var(--layout-split);
   gap: 1rem;
-  align-items: start;
+  align-items: stretch;
 }
 
 .jobs-panel {
+  display: flex;
+  flex-direction: column;
   min-width: 0;
-  max-height: calc(100vh - 12rem);
-  overflow-y: auto;
-  padding-right: 0.15rem;
+  min-height: 0;
+  height: calc(var(--index-map-height) + var(--index-panel-footer));
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  overflow: hidden;
 }
 
 .jobs-panel-header {
-  position: sticky;
-  top: 0;
-  z-index: 1;
+  flex-shrink: 0;
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 0.75rem;
-  margin: 0 0 0.65rem;
-  padding-bottom: 0.35rem;
-  background: linear-gradient(var(--bg-deep) 70%, transparent);
+  margin: 0;
+  padding: 0.65rem 0.9rem;
+  border-bottom: 1px solid var(--border);
+  background: var(--bg-surface);
 }
 
 .jobs-result-count {
@@ -1231,16 +1287,8 @@ a.active-filter-clear:hover {
 .map-panel-sticky {
   position: sticky;
   top: 1rem;
-}
-
-.job-map-index {
-  height: min(calc(100vh - 14rem), 720px);
-  min-height: 400px;
-}
-
-.job-map-detail {
-  height: min(38vh, 300px);
-  min-height: 220px;
+  align-self: start;
+  height: calc(var(--index-map-height) + var(--index-panel-footer));
 }
 
 @media (max-width: 960px) {
@@ -1260,14 +1308,20 @@ a.active-filter-clear:hover {
   .map-panel-sticky {
     position: static;
     order: -1;
+    height: auto;
   }
 
   .jobs-panel {
+    height: auto;
     max-height: none;
-    overflow: visible;
   }
 
-  .job-map-index {
+  .jobs-list {
+    max-height: min(52vh, 480px);
+    padding-right: 0.55rem;
+  }
+
+  .job-map.job-map-index {
     height: min(45vh, 360px);
     min-height: 260px;
   }
@@ -1291,6 +1345,8 @@ a.active-filter-clear:hover {
 .map-toolbar { margin-bottom: 0.85rem; }
 
 .map-panel {
+  display: flex;
+  flex-direction: column;
   background: var(--bg-surface);
   border: 1px solid var(--border);
   border-radius: var(--radius);
@@ -1304,9 +1360,24 @@ a.active-filter-clear:hover {
   background: var(--map-bg);
 }
 
+.job-map.job-map-index {
+  height: var(--index-map-height);
+  min-height: 400px;
+  flex-shrink: 0;
+}
+
+.job-map-detail {
+  height: min(38vh, 300px);
+  min-height: 220px;
+}
+
 .map-footnote {
   margin: 0;
-  padding: 0.65rem 0.9rem 0.25rem;
+  flex-shrink: 0;
+  min-height: var(--index-panel-footer);
+  display: flex;
+  align-items: center;
+  padding: 0.65rem 0.9rem;
   font-size: 0.82rem;
   color: var(--text-muted);
   border-top: 1px solid var(--border);
