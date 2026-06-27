@@ -370,10 +370,9 @@
   }
 
   function renderFilterStack(filters) {
-    const wrap = document.getElementById("filter-stack-wrap");
     const el = document.getElementById("filter-stack");
-    if (!wrap || !el) return;
-    wrap.hidden = !filters.length;
+    const clearBtn = document.getElementById("filter-stack-clear");
+    if (!el) return;
     el.innerHTML = filters
       .map(
         (f) => `
@@ -384,6 +383,7 @@
       </span>`
       )
       .join("");
+    if (clearBtn) clearBtn.disabled = !filters.length;
   }
 
   function restoreMapAreaFromFilters() {
