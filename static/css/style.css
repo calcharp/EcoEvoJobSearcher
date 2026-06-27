@@ -1512,6 +1512,39 @@ a.active-filter-clear:hover {
   color: var(--accent);
 }
 
+.map-tool-btn-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 2.15rem;
+  height: 2.15rem;
+  padding: 0;
+}
+
+.map-panel:fullscreen,
+.map-panel.is-map-fullscreen {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  height: 100%;
+  background: var(--bg-surface);
+  border: none;
+  border-radius: 0;
+}
+
+.map-panel:fullscreen .job-map.job-map-index,
+.map-panel.is-map-fullscreen .job-map.job-map-index {
+  flex: 1;
+  height: auto;
+  min-height: 0;
+  max-height: none;
+}
+
+.map-panel:fullscreen .map-footnote,
+.map-panel.is-map-fullscreen .map-footnote {
+  flex-shrink: 0;
+}
+
 .job-map.map-selecting,
 .job-map.map-selecting .leaflet-container {
   cursor: crosshair;

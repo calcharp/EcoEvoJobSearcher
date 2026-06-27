@@ -2,6 +2,7 @@
   let stack = [];
   let nextId = 1;
   const listeners = new Set();
+  const SESSION_KEY = "jobboards-session";
 
   function makeId() {
     return String(nextId++);
@@ -23,6 +24,24 @@
 
   function defaultStack() {
     return [{ id: makeId(), type: "open", label: "Open applications" }];
+  }
+
+  function defaultViewPrefs() {
+    return { source: "all", sort: "apply_by", order: "asc" };
+  }
+
+  function serializeFilter(f) {
+    const out = { type: f.type, label: f.label };
+    if (f.value != null) out.value = f.value;
+    if (f.field != null) out.field = f.field;
+    if (f.from != null) out.from = f.from;
+    if (f.to != null) out.to = f.to;
+    if (f.bounds != null) out.bounds = f.bounds;
+    return out;
+  }
+
+  function deserializeStack(filters) {
+    return (filters || []).map((f) => ({ ...f, id: makeId() }));
   }
 
   function parseUrl(search) {
@@ -57,13 +76,101 @@
     return filters;
   }
 
+  function parseViewPrefs(search) {
+    const params = new URLSearchParams(search || location.search);
+    return {
+      source: params.get("source"),
+      sort: params.get("sort"),
+      order: params.get("order"),
+    };
+  }
+
   function parseUrlOrDefaults(search) {
     const params = new URLSearchParams(search || location.search);
     if (!params.toString()) return defaultStack();
     return parseUrl(search);
   }
 
+  function stackToParams(filters) {
+    const params = new URLSearchParams();
+    for (const f of filters) {
+      if (f.type === "search") params.append("q", f.value);
+      else if (f.type === "keyword") params.append("kw", f.value);
+      else if (f.type === "area" && f.bounds) {
+        const b = f.bounds;
+        params.set("bbox", `${b.south},${b.west},${b.north},${b.east}`);
+      } else if (f.type === "date") {
+        params.set("date_field", f.field === "apply_by" ? "apply_by" : "posted_at");
+        if (f.from) params.set("from", f.from);
+        if (f.to) params.set("to", f.to);
+      } else if (f.type === "open") {
+        params.set("open", "1");
+      }
+    }
+    return params;
+  }
+
+  function buildIndexQuery(filters, view) {
+    const params = stackToParams(filters);
+    const v = { ...defaultViewPrefs(), ...(view || {}) };
+    if (v.source && v.source !== "all") params.set("source", v.source);
+    if (v.sort) params.set("sort", v.sort);
+    if (v.order) params.set("order", v.order);
+    return params.toString();
+  }
+
+  function getViewPrefs() {
+    if (typeof document !== "undefined" && document.getElementById("source-filter")) {
+      return {
+        source: document.getElementById("source-filter")?.value || "all",
+        sort: document.getElementById("sort-filter")?.value || "apply_by",
+        order: document.getElementById("order-filter")?.value || "asc",
+      };
+    }
+    return loadSession()?.view || defaultViewPrefs();
+  }
+
+  function loadSession() {
+    try {
+      const raw = sessionStorage.getItem(SESSION_KEY);
+      if (!raw) return null;
+      return JSON.parse(raw);
+    } catch {
+      return null;
+    }
+  }
+
+  function saveSession(view) {
+    try {
+      sessionStorage.setItem(
+        SESSION_KEY,
+        JSON.stringify({
+          stack: stack.map(serializeFilter),
+          view: view || getViewPrefs(),
+        })
+      );
+    } catch (_) {}
+  }
+
+  function indexUrlAddingKeyword(term) {
+    const session = loadSession();
+    let filters = session?.stack?.length ? deserializeStack(session.stack) : defaultStack();
+    const val = (term || "").trim();
+    if (
+      val &&
+      !filters.some(
+        (f) => f.type === "keyword" && f.value.toLowerCase() === val.toLowerCase()
+      )
+    ) {
+      filters.push({ id: makeId(), type: "keyword", value: val, label: val });
+    }
+    const view = session?.view || defaultViewPrefs();
+    const qs = buildIndexQuery(filters, view);
+    return qs ? `index.html?${qs}` : "index.html";
+  }
+
   function notify() {
+    saveSession();
     for (const fn of listeners) fn([...stack]);
   }
 
@@ -165,29 +272,19 @@
   }
 
   function buildApiParams(source, sort, order) {
-    const params = new URLSearchParams({ source, sort, order });
-    for (const f of stack) {
-      if (f.type === "search") params.append("q", f.value);
-      else if (f.type === "keyword") params.append("kw", f.value);
-      else if (f.type === "area" && f.bounds) {
-        const b = f.bounds;
-        params.set("bbox", `${b.south},${b.west},${b.north},${b.east}`);
-      } else if (f.type === "date") {
-        params.set("date_field", f.field === "apply_by" ? "apply_by" : "posted_at");
-        if (f.from) params.set("from", f.from);
-        if (f.to) params.set("to", f.to);
-      } else if (f.type === "open") {
-        params.set("open", "1");
-      }
-    }
+    const params = stackToParams(stack);
+    params.set("source", source);
+    params.set("sort", sort);
+    params.set("order", order);
     return params;
   }
 
   function toUrl() {
-    const params = buildApiParams("all", "posted_at", "desc");
-    params.delete("source");
-    params.delete("sort");
-    params.delete("order");
+    const params = stackToParams(stack);
+    const view = getViewPrefs();
+    if (view.source && view.source !== "all") params.set("source", view.source);
+    if (view.sort) params.set("sort", view.sort);
+    if (view.order) params.set("order", view.order);
     const qs = params.toString();
     return qs ? `/?${qs}` : "/";
   }
@@ -200,7 +297,9 @@
   window.JobBoardsFilters = {
     parseUrl,
     parseUrlOrDefaults,
+    parseViewPrefs,
     defaultStack,
+    defaultViewPrefs,
     parseBbox,
     formatDateLabel,
     init,
@@ -214,6 +313,11 @@
     isOpenFilterActive,
     toggleOpenFilter,
     buildApiParams,
+    buildIndexQuery,
+    indexUrlAddingKeyword,
+    saveSession,
+    loadSession,
+    getViewPrefs,
     toUrl,
     onChange,
   };

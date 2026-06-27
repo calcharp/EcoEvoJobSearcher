@@ -50,7 +50,11 @@
         (item) => `
       <a
         class="cloud-term"
-        href="${JobBoardsPageUrl("index.html?kw=" + encodeURIComponent(item.term))}"
+        href="${JobBoardsPageUrl(
+          window.JobBoardsFilters
+            ? JobBoardsFilters.indexUrlAddingKeyword(item.term)
+            : "index.html?kw=" + encodeURIComponent(item.term)
+        )}"
         data-count="${item.count}"
         title="${item.count} listing${item.count === 1 ? "" : "s"}"
       >${esc(item.term)}</a>`

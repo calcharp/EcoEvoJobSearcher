@@ -22,6 +22,23 @@
     return JobBoardsJobUrl(jobId);
   }
 
+  function applyViewPrefsFromUrl() {
+    if (!window.JobBoardsFilters) return;
+    const prefs = JobBoardsFilters.parseViewPrefs();
+    const sourceEl = document.getElementById("source-filter");
+    const sortEl = document.getElementById("sort-filter");
+    const orderEl = document.getElementById("order-filter");
+    if (prefs.source && sourceEl) sourceEl.value = prefs.source;
+    if (prefs.sort && sortEl) sortEl.value = prefs.sort;
+    if (prefs.order && orderEl) orderEl.value = prefs.order;
+  }
+
+  function syncFilterUrl() {
+    if (window.JobBoardsFilters && window.JobBoardsPage === "index") {
+      window.history.replaceState(null, "", JobBoardsFilters.toUrl());
+    }
+  }
+
   function currentTheme() {
     return document.documentElement.getAttribute("data-theme") === "light" ? "light" : "dark";
   }
@@ -558,7 +575,10 @@
   function initIndexMap() {
     const el = document.getElementById("job-map");
     if (!el || !window.JobBoardsMap || !window.L) return;
-    mapCtrl = JobBoardsMap.create(el, { areaSelect: true });
+    mapCtrl = JobBoardsMap.create(el, {
+      areaSelect: true,
+      fullscreenTarget: el.closest(".map-panel"),
+    });
     mapCtrl.onAreaSelected(onAreaSelected);
     document.getElementById("filter-stack")?.addEventListener("click", (e) => {
       const btn = e.target.closest(".filter-chip-remove");
@@ -635,6 +655,8 @@
 
   ["source-filter", "sort-filter", "order-filter"].forEach((id) => {
     document.getElementById(id)?.addEventListener("change", () => {
+      if (window.JobBoardsFilters) JobBoardsFilters.saveSession();
+      syncFilterUrl();
       scheduleReloadResults({ resetFit: true });
     });
   });
@@ -667,6 +689,7 @@
         dateRangeCtrl = JobBoardsDateRange.create(document.getElementById("date-range-panel"));
       }
       if (window.JobBoardsFilters) {
+        applyViewPrefsFromUrl();
         const initial =
           window.JobBoardsInitialFilters?.length
             ? window.JobBoardsInitialFilters
