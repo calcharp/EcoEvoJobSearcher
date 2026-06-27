@@ -37,8 +37,26 @@ JOB_URL_PATTERNS = (
 HEARTBEAT_INTERVAL_SEC = 3
 HEARTBEAT_TIMEOUT_SEC = 10
 EVOLDIR_REQUEST_DELAY_SEC = 0.0
-EVOLDIR_PARALLEL_WORKERS = 3
-SCIENCE_CAREERS_PARALLEL_WORKERS = 3
+EVOLDIR_PARALLEL_WORKERS = int(os.environ.get("EVOLDIR_PARALLEL_WORKERS", "8" if os.environ.get("GITHUB_ACTIONS") else "3"))
+SCIENCE_CAREERS_PARALLEL_WORKERS = int(os.environ.get("SCIENCE_CAREERS_PARALLEL_WORKERS", "3"))
+
+
+def is_github_actions() -> bool:
+    return os.environ.get("GITHUB_ACTIONS") == "true"
+
+
+def http_timeout() -> float:
+    return float(os.environ.get("HTTP_TIMEOUT", "15" if is_github_actions() else "60"))
+
+
+def science_careers_fetch_details() -> bool:
+    default = "0" if is_github_actions() else "1"
+    return os.environ.get("SCIENCE_CAREERS_FETCH_DETAILS", default) == "1"
+
+
+def ci_skip_geocode() -> bool:
+    default = "1" if is_github_actions() else "0"
+    return os.environ.get("SKIP_GEOCODE", default) == "1"
 
 # Browser-like headers — some job boards block datacenter / bot user agents (e.g. GitHub Actions).
 HTTP_HEADERS = {

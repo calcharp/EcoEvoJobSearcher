@@ -13,6 +13,7 @@ from jobboards.config import (
     EVOLDIR_PARALLEL_WORKERS,
     HTTP_HEADERS,
     JOB_URL_PATTERNS,
+    http_timeout,
 )
 from jobboards.dates import parse_deadline_from_slug, parse_deadline_from_text, parse_evoldir_posted
 from jobboards.db import make_id, normalize_url, upsert_job
@@ -48,7 +49,7 @@ JOB_TYPE_TOKENS = {
 
 
 def fetch_index() -> list[dict[str, str]]:
-    resp = SESSION.get(EVOLDIR_INDEX, timeout=60)
+    resp = SESSION.get(EVOLDIR_INDEX, timeout=http_timeout())
     resp.raise_for_status()
     entries = []
     for m in INDEX_PATTERN.finditer(resp.text):
@@ -142,7 +143,7 @@ def _split_multi_jobs(text: str, slug: str) -> list[str]:
 
 def fetch_detail(slug: str) -> tuple[str, str]:
     url = EVOLDIR_DETAIL_BASE + slug
-    resp = SESSION.get(url, timeout=30)
+    resp = SESSION.get(url, timeout=http_timeout())
     resp.raise_for_status()
     return url, resp.text
 

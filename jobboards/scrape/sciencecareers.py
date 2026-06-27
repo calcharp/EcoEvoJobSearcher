@@ -12,6 +12,8 @@ from jobboards.config import (
     HTTP_HEADERS,
     SCIENCE_CAREERS_BASE,
     SCIENCE_CAREERS_PARALLEL_WORKERS,
+    http_timeout,
+    science_careers_fetch_details,
 )
 from jobboards.dates import parse_sciencecareers_closing
 from jobboards.db import make_id, normalize_url, upsert_job
@@ -61,7 +63,7 @@ def _listing_url(page: int) -> str:
 
 
 def fetch_listing_page(page: int) -> str:
-    resp = SESSION.get(_listing_url(page), timeout=60)
+    resp = SESSION.get(_listing_url(page), timeout=http_timeout())
     resp.raise_for_status()
     return resp.text
 
@@ -131,7 +133,7 @@ def _parse_json_ld(html: str) -> Optional[dict[str, Any]]:
 
 def fetch_job_detail(path: str) -> dict[str, Any]:
     url = urljoin(SCIENCE_CAREERS_BASE, path)
-    resp = SESSION.get(url, timeout=60)
+    resp = SESSION.get(url, timeout=http_timeout())
     resp.raise_for_status()
     html = resp.text
     ld = _parse_json_ld(html) or {}
@@ -213,6 +215,17 @@ def _build_job(
     }
 
 
+def _listing_only_detail(listing: dict[str, str]) -> dict[str, Any]:
+    return {
+        "posted_at": None,
+        "apply_by": None,
+        "description_raw": listing.get("snippet"),
+        "subject_area": listing.get("snippet") or listing.get("title"),
+        "position_type": None,
+        "fetch_status": "listing_only",
+    }
+
+
 def _fetch_listing_detail(listing: dict[str, str]) -> tuple[dict[str, str], dict[str, Any]]:
     try:
         detail = fetch_job_detail(listing["path"])
@@ -240,6 +253,22 @@ def scrape_sciencecareers(
         )
 
     count = 0
+    if not science_careers_fetch_details():
+        for done, listing in enumerate(listings, start=1):
+            job = _build_job(listing, _listing_only_detail(listing), scraped_at)
+            upsert_job(conn, job)
+            count += 1
+            if done % 50 == 0:
+                conn.commit()
+            if state:
+                state.update(
+                    sciencecareers_done=done,
+                    sciencecareers_count=count,
+                    message=f"Science Careers {done}/{total} (listings only)",
+                )
+        conn.commit()
+        return count
+
     workers = min(SCIENCE_CAREERS_PARALLEL_WORKERS, max(total, 1))
     with ThreadPoolExecutor(max_workers=workers) as pool:
         futures = {pool.submit(_fetch_listing_detail, item): item for item in listings}

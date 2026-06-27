@@ -3,13 +3,14 @@
 from __future__ import annotations
 
 import json
-import os
 import shutil
+import time
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
 from jobboards.db import init_db, job_date_bounds, job_stats, list_jobs
+from jobboards.config import ci_skip_geocode, is_github_actions, science_careers_fetch_details
 from jobboards.dates import days_until, format_display
 from jobboards.preview import can_preview, preview_target
 from jobboards.geocode import (
@@ -127,6 +128,8 @@ def publish(
     out_dir.mkdir(parents=True)
 
     init_db()
+    t0 = time.monotonic()
+
     if GEO_CACHE_SEED.is_file():
         imported = import_geo_cache(GEO_CACHE_SEED)
         if imported:
@@ -134,6 +137,9 @@ def publish(
 
     scrape_warnings: list[str] = []
     if scrape:
+        if is_github_actions():
+            mode = "listings-only Science Careers" if not science_careers_fetch_details() else "full scrape"
+            print(f"CI scrape mode: {mode}")
         state = ScrapeState()
         started = datetime.now(timezone.utc).replace(microsecond=0).isoformat()
         state.update(phase="starting", message="Scraping sources…", started_at=started)
@@ -141,9 +147,16 @@ def publish(
         scrape_warnings = list(state.warnings or [])
         if state.phase == "error" or job_stats().get("total", 0) == 0:
             raise RuntimeError(state.error or "Scrape failed with no jobs")
+        print(f"Scrape finished in {time.monotonic() - t0:.1f}s")
 
+    if geocode_limit is None and ci_skip_geocode():
+        geocode_limit = 0
     if geocode_limit != 0:
+        geo_t0 = time.monotonic()
         geocode_pending_loop(geocode_limit)
+        print(f"Geocoded pending places in {time.monotonic() - geo_t0:.1f}s")
+    elif is_github_actions():
+        print("Skipping geocode on CI (using committed geo-cache.json)")
 
     all_jobs = list_jobs(sort="posted_at", order="desc")
     export_jobs = [enrich_export_job(job, include_detail=True) for job in all_jobs]
@@ -182,6 +195,8 @@ def publish(
     copy_static_assets(out_dir)
     render_site_pages(out_dir, base_path, stats)
     (out_dir / ".nojekyll").write_text("", encoding="utf-8")
+
+    print(f"Publish finished in {time.monotonic() - t0:.1f}s total")
 
     return {
         "out_dir": str(out_dir),

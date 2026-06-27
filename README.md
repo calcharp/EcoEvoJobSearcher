@@ -54,7 +54,7 @@ Options:
 |----------|---------|--------|
 | **Deploy GitHub Pages** | Push to `main`, daily schedule, manual | Live site |
 
-The workflow caches `jobs.db` between runs. Geocoding on CI is limited to new places only; bulk geocoding should be done locally via `scripts/geocode.py` and committed in `data/geo-cache.json`.
+The workflow caches `jobs.db` between runs. On GitHub Actions, Science Careers uses **listing pages only** (no per-job detail fetches), geocoding is skipped (seed file is imported), and HTTP timeouts are shorter — the build should finish in a few minutes. Run `python scripts/scrape.py` locally for full Science Careers detail pages.
 
 ## Data storage
 

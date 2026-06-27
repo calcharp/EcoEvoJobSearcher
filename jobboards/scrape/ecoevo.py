@@ -5,7 +5,7 @@ from typing import Any, Iterator, Optional
 
 import requests
 
-from jobboards.config import ECOEVO_FACULTY_GID, ECOEVO_POSTDOC_GID, ECOEVO_SHEET_ID, HTTP_HEADERS
+from jobboards.config import ECOEVO_FACULTY_GID, ECOEVO_POSTDOC_GID, ECOEVO_SHEET_ID, HTTP_HEADERS, http_timeout
 from jobboards.dates import parse_ecoevo_date, parse_ecoevo_datetime
 from jobboards.db import make_id, normalize_url, upsert_job
 
@@ -21,7 +21,7 @@ def _export_url(gid: str) -> str:
 
 
 def iter_tab_jobs(gid: str, tab_name: str, scraped_at: str) -> Iterator[dict[str, Any]]:
-    resp = SESSION.get(_export_url(gid), timeout=120)
+    resp = SESSION.get(_export_url(gid), timeout=max(http_timeout(), 30))
     resp.raise_for_status()
     reader = csv.reader(io.StringIO(resp.text))
     next(reader, None)
