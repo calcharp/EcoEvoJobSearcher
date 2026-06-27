@@ -45,6 +45,34 @@
     return job.days_until >= 0;
   }
 
+  function localDayString(d) {
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, "0");
+    const day = String(d.getDate()).padStart(2, "0");
+    return `${y}-${m}-${day}`;
+  }
+
+  function postedLocalDay(job) {
+    const raw = job.posted_at;
+    if (!raw) return null;
+    if (/^\d{4}-\d{2}-\d{2}$/.test(raw)) return raw;
+    const d = new Date(raw);
+    if (Number.isNaN(d.getTime())) return null;
+    return localDayString(d);
+  }
+
+  function matchesRecent(job, recentOnly) {
+    if (!recentOnly) return true;
+    const day = postedLocalDay(job);
+    if (!day) return false;
+    const today = new Date();
+    const yesterday = new Date(today);
+    yesterday.setDate(yesterday.getDate() - 1);
+    const todayStr = localDayString(today);
+    const yesterdayStr = localDayString(yesterday);
+    return day === todayStr || day === yesterdayStr;
+  }
+
   function compareValues(a, b) {
     if (a == null && b == null) return 0;
     if (a == null) return 1;
@@ -68,6 +96,7 @@
     out = out.filter((j) => matchesTerms(j, opts.terms));
     out = out.filter((j) => matchesDate(j, opts.dateRange));
     out = out.filter((j) => matchesOpen(j, opts.openOnly));
+    out = out.filter((j) => matchesRecent(j, opts.recentOnly));
     return sortJobs(out, opts.sort, opts.order);
   }
 

@@ -73,6 +73,9 @@
     if (params.get("open") === "1") {
       filters.push({ id: makeId(), type: "open", label: "Open applications" });
     }
+    if (params.get("recent") === "1") {
+      filters.push({ id: makeId(), type: "recent", label: "New since yesterday" });
+    }
     return filters;
   }
 
@@ -105,6 +108,8 @@
         if (f.to) params.set("to", f.to);
       } else if (f.type === "open") {
         params.set("open", "1");
+      } else if (f.type === "recent") {
+        params.set("recent", "1");
       }
     }
     return params;
@@ -226,6 +231,17 @@
       return;
     }
 
+    if (filter.type === "recent") {
+      if (stack.some((f) => f.type === "recent")) return;
+      stack.push({
+        id: makeId(),
+        type: "recent",
+        label: filter.label || "New since yesterday",
+      });
+      notify();
+      return;
+    }
+
     const val = (filter.value || "").trim();
     if (!val) return;
     if (stack.some((f) => f.type === filter.type && f.value.toLowerCase() === val.toLowerCase())) {
@@ -271,6 +287,19 @@
     notify();
   }
 
+  function isRecentFilterActive() {
+    return stack.some((f) => f.type === "recent");
+  }
+
+  function toggleRecentFilter() {
+    if (isRecentFilterActive()) {
+      stack = stack.filter((f) => f.type !== "recent");
+    } else {
+      stack.push({ id: makeId(), type: "recent", label: "New since yesterday" });
+    }
+    notify();
+  }
+
   function buildApiParams(source, sort, order) {
     const params = stackToParams(stack);
     params.set("source", source);
@@ -312,6 +341,8 @@
     getDateFilter,
     isOpenFilterActive,
     toggleOpenFilter,
+    isRecentFilterActive,
+    toggleRecentFilter,
     buildApiParams,
     buildIndexQuery,
     indexUrlAddingKeyword,

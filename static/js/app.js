@@ -16,7 +16,7 @@
   let pendingReloadOpts = null;
   let reloadTimer = null;
 
-  const FILTER_TYPE_LABELS = { search: "Search", keyword: "Keyword", area: "Area", date: "Date", open: "Open" };
+  const FILTER_TYPE_LABELS = { search: "Search", keyword: "Keyword", area: "Area", date: "Date", open: "Open", recent: "Recent" };
 
   function jobDetailHref(jobId) {
     return JobBoardsJobUrl(jobId);
@@ -217,6 +217,7 @@
       terms,
       dateRange: dateRange && (dateRange.from || dateRange.to) ? dateRange : null,
       openOnly: stack.some((f) => f.type === "open"),
+      recentOnly: stack.some((f) => f.type === "recent"),
     };
   }
 
@@ -499,6 +500,12 @@
       openToggle.classList.toggle("is-active", active);
       openToggle.setAttribute("aria-pressed", active ? "true" : "false");
     }
+    const recentToggle = document.getElementById("recent-jobs-toggle");
+    if (recentToggle && window.JobBoardsFilters) {
+      const active = JobBoardsFilters.isRecentFilterActive();
+      recentToggle.classList.toggle("is-active", active);
+      recentToggle.setAttribute("aria-pressed", active ? "true" : "false");
+    }
     if (window.JobBoardsFilters) {
       window.history.replaceState(null, "", JobBoardsFilters.toUrl());
     }
@@ -597,6 +604,10 @@
     document.getElementById("open-jobs-toggle")?.addEventListener("click", () => {
       if (!window.JobBoardsFilters) return;
       JobBoardsFilters.toggleOpenFilter();
+    });
+    document.getElementById("recent-jobs-toggle")?.addEventListener("click", () => {
+      if (!window.JobBoardsFilters) return;
+      JobBoardsFilters.toggleRecentFilter();
     });
     wireJobsListMapEvents();
     restoreMapAreaFromFilters();
