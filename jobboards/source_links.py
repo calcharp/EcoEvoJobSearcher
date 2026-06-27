@@ -53,6 +53,53 @@ def source_discussion_url(job: dict) -> Optional[str]:
     return None
 
 
+def source_discussion_links(siblings: list[dict]) -> list[dict[str, str]]:
+    """Discussion/archive links for every source row sharing a posting URL."""
+    links: list[dict[str, str]] = []
+    seen_urls: set[str] = set()
+    for s in siblings:
+        url = source_discussion_url(s)
+        if not url or url in seen_urls:
+            continue
+        seen_urls.add(url)
+        label = source_discussion_label(s)
+        if not label:
+            continue
+        links.append({"url": url, "label": label, "source": s.get("source") or ""})
+    order = {"ecoevojobs": 0, "evoldir": 1, "sciencecareers": 2}
+    links.sort(key=lambda item: order.get(item["source"], 9))
+    return links
+
+
+def discussion_siblings_for_job(
+    job: dict,
+    source_rows_by_url: Optional[dict[str, list[dict]]] = None,
+) -> list[dict]:
+    """Collect per-source rows needed to build discussion links for a job."""
+    norm = job.get("url_normalized")
+    siblings: list[dict] = list((source_rows_by_url or {}).get(norm or "", []))
+    primary = {
+        "source": job.get("source"),
+        "source_tab": job.get("source_tab"),
+        "source_slug": job.get("source_slug"),
+    }
+    replaced = False
+    for i, s in enumerate(siblings):
+        if s.get("source") == primary["source"]:
+            siblings[i] = {
+                **s,
+                "source_tab": primary.get("source_tab") or s.get("source_tab"),
+                "source_slug": primary.get("source_slug") or s.get("source_slug"),
+            }
+            replaced = True
+            break
+    if not replaced and primary.get("source"):
+        siblings.append(primary)
+    if not siblings and primary.get("source"):
+        siblings = [primary]
+    return siblings
+
+
 def source_discussion_label(job: dict) -> Optional[str]:
     if job.get("source") == "ecoevojobs":
         return "Discuss on ecoevojobs"

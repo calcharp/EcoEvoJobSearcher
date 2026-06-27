@@ -261,19 +261,54 @@ def get_job(job_id: str) -> Optional[dict[str, Any]]:
     return job
 
 
-def _attach_merge_info(jobs: list[dict[str, Any]]):
+def merge_source_map() -> dict[str, set[str]]:
+    """Map url_normalized -> set of sources listing that URL."""
+    with connect() as conn:
+        rows = conn.execute(
+            """
+            SELECT url_normalized, source FROM jobs
+            WHERE url_normalized IS NOT NULL AND url_normalized != ''
+            """
+        ).fetchall()
     url_map: dict[str, set[str]] = {}
-    for job in jobs:
-        norm = job.get("url_normalized")
-        if norm:
-            url_map.setdefault(norm, set()).add(job["source"])
+    for row in rows:
+        url_map.setdefault(row["url_normalized"], set()).add(row["source"])
+    return url_map
 
+
+def source_rows_by_url() -> dict[str, list[dict[str, Any]]]:
+    """Minimal per-source rows grouped by normalized posting URL."""
+    with connect() as conn:
+        rows = conn.execute(
+            """
+            SELECT source, source_tab, source_slug, url_normalized
+            FROM jobs
+            WHERE url_normalized IS NOT NULL AND url_normalized != ''
+            """
+        ).fetchall()
+    by_url: dict[str, list[dict[str, Any]]] = {}
+    for row in rows:
+        norm = row["url_normalized"]
+        entry = {
+            "source": row["source"],
+            "source_tab": row["source_tab"],
+            "source_slug": row["source_slug"],
+        }
+        bucket = by_url.setdefault(norm, [])
+        if not any(e["source"] == entry["source"] for e in bucket):
+            bucket.append(entry)
+    return by_url
+
+
+def _attach_merge_info(jobs: list[dict[str, Any]], url_map: Optional[dict[str, set[str]]] = None):
+    if url_map is None:
+        url_map = merge_source_map()
     for job in jobs:
         norm = job.get("url_normalized")
-        sources = {job["source"]}
         if norm and norm in url_map:
-            sources = url_map[norm]
-        job["sources"] = sorted(sources)
+            job["sources"] = sorted(url_map[norm])
+        else:
+            job["sources"] = [job["source"]]
 
 
 def job_stats(since: Optional[str] = None) -> dict[str, Any]:

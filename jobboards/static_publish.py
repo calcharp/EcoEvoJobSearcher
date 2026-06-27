@@ -14,7 +14,10 @@ from jobboards.db import init_db, job_date_bounds, job_stats, list_jobs
 from jobboards.config import ci_skip_geocode, is_github_actions, science_careers_fetch_details
 from jobboards.dates import days_until, format_display
 from jobboards.preview import can_preview, preview_target
-from jobboards.source_links import source_discussion_label, source_discussion_url
+from jobboards.source_links import (
+    discussion_siblings_for_job,
+    source_discussion_links,
+)
 from jobboards.geocode import (
     get_job_geo,
     get_place_map_status,
@@ -39,7 +42,11 @@ def pages_base_path() -> str:
     return "./"
 
 
-def enrich_export_job(job: dict[str, Any], include_detail: bool = False) -> dict[str, Any]:
+def enrich_export_job(
+    job: dict[str, Any],
+    include_detail: bool = False,
+    source_rows_by_url: dict[str, list[dict[str, Any]]] | None = None,
+) -> dict[str, Any]:
     job = dict(job)
     job["posted_display"] = format_display(job.get("posted_at"), include_time=True)
     job["apply_display"] = format_display(job.get("apply_by"))
@@ -76,8 +83,14 @@ def enrich_export_job(job: dict[str, Any], include_detail: bool = False) -> dict
         _, open_url = preview_target(job)
         job["preview_open_url"] = open_url
         job["has_preview"] = can_preview(job)
-        job["discussion_url"] = source_discussion_url(job)
-        job["discussion_label"] = source_discussion_label(job)
+        siblings = discussion_siblings_for_job(job, source_rows_by_url)
+        job["discussion_links"] = source_discussion_links(siblings)
+        if job["discussion_links"]:
+            job["discussion_url"] = job["discussion_links"][0]["url"]
+            job["discussion_label"] = job["discussion_links"][0]["label"]
+        else:
+            job["discussion_url"] = None
+            job["discussion_label"] = None
     else:
         job.pop("description_raw", None)
         job.pop("notes_raw", None)
@@ -168,7 +181,13 @@ def publish(
         print("Skipping geocode on CI (using committed geo-cache.json)")
 
     all_jobs = list_jobs(sort="posted_at", order="desc")
-    export_jobs = [enrich_export_job(job, include_detail=True) for job in all_jobs]
+    from jobboards.db import source_rows_by_url
+
+    siblings_map = source_rows_by_url()
+    export_jobs = [
+        enrich_export_job(job, include_detail=True, source_rows_by_url=siblings_map)
+        for job in all_jobs
+    ]
 
     mapped, missing = list_map_jobs(sort="posted_at", order="desc")
     geo_summary = map_coverage_summary()

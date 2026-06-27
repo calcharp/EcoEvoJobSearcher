@@ -102,23 +102,39 @@
         ? `<p class="detail-hint">Dates and full description are on the official Science Careers posting.</p>`
         : "";
 
+    const discussionLinks = (job.discussion_links || []).length
+      ? job.discussion_links
+      : job.discussion_url
+        ? [{ url: job.discussion_url, label: job.discussion_label || "View on source site", source: job.source }]
+        : [];
+
     const actionLinks = [
       job.url
         ? `<a href="${esc(job.url)}" class="btn btn-primary btn-lg external-link" target="_blank" rel="noopener">Open official posting ↗</a>`
         : "",
-      job.discussion_url
-        ? `<a href="${esc(job.discussion_url)}" class="btn btn-ghost btn-lg external-link" target="_blank" rel="noopener">${esc(job.discussion_label || "View on source site")} ↗</a>`
-        : "",
+      ...discussionLinks.map(
+        (link) =>
+          `<a href="${esc(link.url)}" class="btn btn-ghost btn-lg external-link" target="_blank" rel="noopener">${esc(link.label)} ↗</a>`
+      ),
     ]
       .filter(Boolean)
       .join("");
 
-    const discussionHint =
-      job.source === "ecoevojobs" && job.discussion_url
-        ? `<p class="detail-hint">Community notes are added in the <strong>Notes</strong> column on the ecoevojobs spreadsheet. You need edit access to comment there.</p>`
-        : job.source === "evoldir" && job.discussion_url
-          ? `<p class="detail-hint">EvolDir listings are email archives. Discussion happens on the mailing list, not on the archive page.</p>`
-          : "";
+    const sourceSet = new Set((job.sources || [job.source]).filter(Boolean));
+    const hints = [];
+    if (sourceSet.has("ecoevojobs") && discussionLinks.some((l) => l.source === "ecoevojobs")) {
+      hints.push(
+        "Community notes are added in the <strong>Notes</strong> column on the ecoevojobs spreadsheet. You need edit access to comment there."
+      );
+    }
+    if (sourceSet.has("evoldir") && discussionLinks.some((l) => l.source === "evoldir")) {
+      hints.push(
+        "EvolDir listings are email archives. Discussion happens on the mailing list, not on the archive page."
+      );
+    }
+    const discussionHint = hints.length
+      ? `<p class="detail-hint">${hints.join(" ")}</p>`
+      : "";
 
     const mapPane = job.map_geo
       ? `
