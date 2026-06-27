@@ -16,4 +16,8 @@
   window.JobBoardsPageUrl = function (page) {
     return base + page;
   };
+
+  window.JobBoardsJobUrl = function (jobId) {
+    return JobBoardsPageUrl(`job.html?id=${encodeURIComponent(jobId)}`);
+  };
 })();

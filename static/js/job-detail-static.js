@@ -116,10 +116,18 @@
       return;
     }
     try {
-      const res = await fetch(JobBoardsDataUrl("jobs.json"), { cache: "no-store" });
-      const data = await res.json();
-      const jobs = JobBoardsStore.attachUserFlags(data.jobs || []);
-      renderDetail(jobs.find((j) => j.id === id) || null);
+      let job = null;
+      const perJobRes = await fetch(JobBoardsDataUrl(`jobs/${id}.json`), { cache: "no-store" });
+      if (perJobRes.ok) {
+        job = await perJobRes.json();
+      } else {
+        const res = await fetch(JobBoardsDataUrl("jobs.json"), { cache: "no-store" });
+        if (!res.ok) throw new Error("jobs fetch failed");
+        const data = await res.json();
+        job = (data.jobs || []).find((j) => j.id === id) || null;
+      }
+      if (job) JobBoardsStore.attachUserFlags([job]);
+      renderDetail(job);
     } catch {
       renderDetail(null);
     }

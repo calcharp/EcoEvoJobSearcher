@@ -162,6 +162,10 @@ def publish(
         "scrape_warnings": scrape_warnings,
     })
     write_json(data_dir / "jobs.json", {"jobs": export_jobs, "stats": stats})
+    jobs_dir = data_dir / "jobs"
+    jobs_dir.mkdir(parents=True, exist_ok=True)
+    for job in export_jobs:
+        write_json(jobs_dir / f"{job['id']}.json", job)
     write_json(data_dir / "map-jobs.json", {
         "jobs": mapped,
         "mapped": len(mapped),

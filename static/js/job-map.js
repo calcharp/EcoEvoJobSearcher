@@ -13,6 +13,11 @@
     return "#8b9aab";
   }
 
+  function jobLink(jobId) {
+    if (window.JobBoardsJobUrl) return JobBoardsJobUrl(jobId);
+    return `/jobs/${jobId}`;
+  }
+
   function popupHtml(job) {
     const title = job.subject_area || job.institution || "Job";
     const place = [job.institution, job.location].filter(Boolean).join(" · ");
@@ -20,7 +25,7 @@
       <div class="map-popup">
         <strong>${esc(title)}</strong>
         <div>${esc(place)}</div>
-        <a href="/jobs/${job.id}">View listing</a>
+        <a href="${jobLink(job.id)}">View listing</a>
       </div>`;
   }
 

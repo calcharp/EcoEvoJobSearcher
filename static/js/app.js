@@ -22,6 +22,7 @@
   }
 
   function jobDetailHref(jobId) {
+    if (window.JobBoardsJobUrl) return JobBoardsJobUrl(jobId);
     if (window.JobBoardsStatic) {
       return JobBoardsPageUrl(`job.html?id=${encodeURIComponent(jobId)}`);
     }
