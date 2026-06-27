@@ -170,9 +170,14 @@
       </div>`;
 
     if (job.map_geo && window.JobBoardsMap) {
-      window.JobBoardsJobGeo = job.map_geo;
-      const ctrl = JobBoardsMap.create(document.getElementById("job-detail-map"));
-      ctrl.showSingle(job.map_geo, 13);
+      try {
+        window.JobBoardsJobGeo = job.map_geo;
+        const mapEl = document.getElementById("job-detail-map");
+        const ctrl = JobBoardsMap.create(mapEl);
+        if (ctrl) ctrl.showSingle(job.map_geo, 13);
+      } catch (_) {
+        /* Map is optional; job details should still render */
+      }
     }
   }
 
@@ -195,6 +200,10 @@
         if (!res.ok) throw new Error("jobs fetch failed");
         const data = await res.json();
         job = (data.jobs || []).find((j) => j.id === id) || null;
+      }
+      if (!job) {
+        renderDetail(null);
+        return;
       }
       renderDetail(job);
     } catch {
