@@ -2,6 +2,7 @@ import re
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime, timezone
+from pathlib import Path
 from typing import Any, Optional
 
 import requests
@@ -284,6 +285,7 @@ def geocode_place(institution: str, location: Optional[str]) -> dict[str, Any]:
 
 
 def get_pending_places(limit: int = 100) -> list[tuple[str, str, str]]:
+    """Places that have never been geocoded (no geo_cache row)."""
     with connect() as conn:
         rows = conn.execute(
             """
@@ -293,7 +295,26 @@ def get_pending_places(limit: int = 100) -> list[tuple[str, str, str]]:
               ON g.institution = j.institution
              AND COALESCE(g.location, '') = COALESCE(j.location, '')
             WHERE COALESCE(j.institution, '') != ''
-              AND (g.place_key IS NULL OR g.lat IS NULL)
+              AND g.place_key IS NULL
+            LIMIT ?
+            """,
+            (limit,),
+        ).fetchall()
+    return [(place_key(r["institution"], r["location"]), r["institution"], r["location"]) for r in rows]
+
+
+def get_failed_places(limit: int = 100) -> list[tuple[str, str, str]]:
+    """Places geocoded before but with no coordinates (for optional local retry)."""
+    with connect() as conn:
+        rows = conn.execute(
+            """
+            SELECT DISTINCT j.institution, COALESCE(j.location, '') AS location
+            FROM jobs j
+            INNER JOIN geo_cache g
+              ON g.institution = j.institution
+             AND COALESCE(g.location, '') = COALESCE(j.location, '')
+            WHERE COALESCE(j.institution, '') != ''
+              AND g.lat IS NULL
             LIMIT ?
             """,
             (limit,),
@@ -415,7 +436,15 @@ def list_map_jobs(
 
 
 def run_geocode_batch(max_places: int = GEOCODE_BATCH_SIZE) -> int:
-    pending = get_pending_places(limit=max_places)
+    return _run_geocode_batch(get_pending_places, max_places)
+
+
+def run_geocode_retry_batch(max_places: int = GEOCODE_BATCH_SIZE) -> int:
+    return _run_geocode_batch(get_failed_places, max_places)
+
+
+def _run_geocode_batch(fetch_places, max_places: int) -> int:
+    pending = fetch_places(limit=max_places)
     if not pending:
         return 0
     with ThreadPoolExecutor(max_workers=GEOCODE_WORKERS) as pool:
@@ -429,7 +458,16 @@ def run_geocode_batch(max_places: int = GEOCODE_BATCH_SIZE) -> int:
 
 
 def run_geocode_all(max_total: Optional[int] = None) -> int:
-    """Geocode all pending places. max_total=None means no limit."""
+    """Geocode places not yet in geo_cache. max_total=None means no limit."""
+    return _run_geocode_loop(run_geocode_batch, max_total)
+
+
+def run_geocode_retry_all(max_total: Optional[int] = None) -> int:
+    """Retry places that previously failed to geocode (local use)."""
+    return _run_geocode_loop(run_geocode_retry_batch, max_total)
+
+
+def _run_geocode_loop(batch_fn, max_total: Optional[int]) -> int:
     total = 0
     while True:
         if max_total is not None and total >= max_total:
@@ -437,8 +475,75 @@ def run_geocode_all(max_total: Optional[int] = None) -> int:
         batch_limit = GEOCODE_BATCH_SIZE
         if max_total is not None:
             batch_limit = min(batch_limit, max_total - total)
-        done = run_geocode_batch(max_places=batch_limit)
+        done = batch_fn(max_places=batch_limit)
         if done == 0:
             break
         total += done
     return total
+
+
+def export_geo_cache(path: Path) -> int:
+    """Write all geo_cache rows to JSON for seeding CI builds."""
+    import json
+
+    with connect() as conn:
+        rows = conn.execute(
+            """
+            SELECT place_key, institution, location, query, lat, lon,
+                   precision, display_name, geocoded_at, error
+            FROM geo_cache
+            ORDER BY place_key
+            """
+        ).fetchall()
+    entries = [dict(row) for row in rows]
+    payload = {
+        "version": 1,
+        "exported_at": datetime.now(timezone.utc).replace(microsecond=0).isoformat(),
+        "entries": entries,
+    }
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
+    return len(entries)
+
+
+def import_geo_cache(path: Path) -> int:
+    """Merge geo_cache rows from a JSON seed file into the local database."""
+    import json
+
+    if not path.is_file():
+        return 0
+    payload = json.loads(path.read_text(encoding="utf-8"))
+    entries = payload.get("entries") or []
+    if not entries:
+        return 0
+    with connect() as conn:
+        for row in entries:
+            conn.execute(
+                """
+                INSERT INTO geo_cache (
+                    place_key, institution, location, query, lat, lon,
+                    precision, display_name, geocoded_at, error
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT(place_key) DO UPDATE SET
+                    query=excluded.query,
+                    lat=excluded.lat,
+                    lon=excluded.lon,
+                    precision=excluded.precision,
+                    display_name=excluded.display_name,
+                    geocoded_at=excluded.geocoded_at,
+                    error=excluded.error
+                """,
+                (
+                    row["place_key"],
+                    row["institution"],
+                    row.get("location") or "",
+                    row["query"],
+                    row.get("lat"),
+                    row.get("lon"),
+                    row.get("precision"),
+                    row.get("display_name"),
+                    row.get("geocoded_at"),
+                    row.get("error"),
+                ),
+            )
+    return len(entries)

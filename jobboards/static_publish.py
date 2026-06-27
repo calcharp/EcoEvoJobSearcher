@@ -12,12 +12,18 @@ from typing import Any
 from jobboards.db import init_db, job_date_bounds, job_stats, list_jobs
 from jobboards.dates import days_until, format_display
 from jobboards.preview import can_preview, preview_target
-from jobboards.geocode import get_job_geo, list_map_jobs, run_geocode_all
+from jobboards.geocode import (
+    get_job_geo,
+    import_geo_cache,
+    list_map_jobs,
+    run_geocode_all,
+)
 from jobboards.notes import parse_notes_thread
 from jobboards.scrape.runner import ScrapeState, scrape_all
 from jobboards.subjects import subject_term_counts
 
 ROOT = Path(__file__).resolve().parent.parent
+GEO_CACHE_SEED = ROOT / "data" / "geo-cache.json"
 
 
 def pages_base_path() -> str:
@@ -121,6 +127,11 @@ def publish(
     out_dir.mkdir(parents=True)
 
     init_db()
+    if GEO_CACHE_SEED.is_file():
+        imported = import_geo_cache(GEO_CACHE_SEED)
+        if imported:
+            print(f"Imported {imported} geocode entries from {GEO_CACHE_SEED.name}")
+
     scrape_warnings: list[str] = []
     if scrape:
         state = ScrapeState()

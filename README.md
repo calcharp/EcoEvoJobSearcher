@@ -10,6 +10,26 @@ Browse, filter, map, and explore subject terms — no install needed.
 
 Listings refresh when the **Deploy GitHub Pages** workflow runs (daily at noon UTC, or manually from the Actions tab). First-time setup: repo **Settings → Pages → Build and deployment → Source: GitHub Actions**.
 
+## First-time setup (maintainer)
+
+Geocoding is fast locally but slow on CI. Before the first deploy (or after many new institutions appear), run geocoding locally and commit the seed file:
+
+```bash
+pip install -r requirements.txt
+python scripts/geocode.py --scrape --retry-failed --export
+git add data/geo-cache.json
+git commit -m "Update geocode seed"
+git push
+```
+
+`data/geo-cache.json` is imported automatically during each Pages build. CI only geocodes **new** places not in the seed (usually a handful per day).
+
+To refresh the seed without scraping:
+
+```bash
+python scripts/geocode.py --export
+```
+
 ## Build the site locally
 
 Requires Python 3.12+:
@@ -34,7 +54,7 @@ Options:
 |----------|---------|--------|
 | **Deploy GitHub Pages** | Push to `main`, daily schedule, manual | Live site |
 
-The workflow caches `jobs.db` between runs so geocoding results accumulate. Geocoding uses parallel requests (Photon, with Nominatim fallback) with no artificial cap during deploy.
+The workflow caches `jobs.db` between runs. Geocoding on CI is limited to new places only; bulk geocoding should be done locally via `scripts/geocode.py` and committed in `data/geo-cache.json`.
 
 ## Data storage
 
