@@ -54,8 +54,8 @@
   }
 
   function sortJobs(jobs, sort, order) {
-    const col = sort || "posted_at";
-    const desc = (order || "desc").toLowerCase() === "desc";
+    const col = sort || "apply_by";
+    const desc = (order || "asc").toLowerCase() === "desc";
     return [...jobs].sort((a, b) => {
       const cmp = compareValues(a[col], b[col]);
       return desc ? -cmp : cmp;

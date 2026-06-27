@@ -44,20 +44,20 @@
       <option value="sciencecareers">Science Careers</option>
     </select>
     <select id="sort-filter" class="select" aria-label="Sort by">
-      <option value="apply_by">Apply by date</option>
-      <option value="posted_at" selected>Posted date</option>
+      <option value="apply_by" selected>Apply by date</option>
+      <option value="posted_at">Posted date</option>
       <option value="updated_at">Last updated</option>
       <option value="institution">Institution A–Z</option>
     </select>
     <select id="order-filter" class="select" aria-label="Order">
-      <option value="asc">Ascending</option>
-      <option value="desc" selected>Descending</option>
+      <option value="asc" selected>Ascending</option>
+      <option value="desc">Descending</option>
     </select>
     <button
       type="button"
-      class="filter-toggle-btn"
+      class="filter-toggle-btn is-active"
       id="open-jobs-toggle"
-      aria-pressed="false"
+      aria-pressed="true"
       title="Show only jobs still accepting applications (or with no deadline listed)"
     >Open only</button>
   </div>

@@ -195,8 +195,8 @@
     }
     return {
       source: document.getElementById("source-filter")?.value || "all",
-      sort: document.getElementById("sort-filter")?.value || "posted_at",
-      order: document.getElementById("order-filter")?.value || "desc",
+      sort: document.getElementById("sort-filter")?.value || "apply_by",
+      order: document.getElementById("order-filter")?.value || "asc",
       terms,
       dateRange: dateRange && (dateRange.from || dateRange.to) ? dateRange : null,
       openOnly: stack.some((f) => f.type === "open"),
@@ -670,7 +670,7 @@
         const initial =
           window.JobBoardsInitialFilters?.length
             ? window.JobBoardsInitialFilters
-            : JobBoardsFilters.parseUrl();
+            : JobBoardsFilters.parseUrlOrDefaults();
         JobBoardsFilters.onChange(onFiltersChanged);
         JobBoardsFilters.init(initial);
       } else {

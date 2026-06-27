@@ -21,6 +21,10 @@
     return `${name}: ${start} – ${end}`;
   }
 
+  function defaultStack() {
+    return [{ id: makeId(), type: "open", label: "Open applications" }];
+  }
+
   function parseUrl(search) {
     const params = new URLSearchParams(search || location.search);
     const filters = [];
@@ -51,6 +55,12 @@
       filters.push({ id: makeId(), type: "open", label: "Open applications" });
     }
     return filters;
+  }
+
+  function parseUrlOrDefaults(search) {
+    const params = new URLSearchParams(search || location.search);
+    if (!params.toString()) return defaultStack();
+    return parseUrl(search);
   }
 
   function notify() {
@@ -189,6 +199,8 @@
 
   window.JobBoardsFilters = {
     parseUrl,
+    parseUrlOrDefaults,
+    defaultStack,
     parseBbox,
     formatDateLabel,
     init,
