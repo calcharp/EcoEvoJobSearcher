@@ -102,6 +102,24 @@
         ? `<p class="detail-hint">Dates and full description are on the official Science Careers posting.</p>`
         : "";
 
+    const actionLinks = [
+      job.url
+        ? `<a href="${esc(job.url)}" class="btn btn-primary btn-lg external-link" target="_blank" rel="noopener">Open official posting ↗</a>`
+        : "",
+      job.discussion_url
+        ? `<a href="${esc(job.discussion_url)}" class="btn btn-ghost btn-lg external-link" target="_blank" rel="noopener">${esc(job.discussion_label || "View on source site")} ↗</a>`
+        : "",
+    ]
+      .filter(Boolean)
+      .join("");
+
+    const discussionHint =
+      job.source === "ecoevojobs" && job.discussion_url
+        ? `<p class="detail-hint">Community notes are added in the <strong>Notes</strong> column on the ecoevojobs spreadsheet. You need edit access to comment there.</p>`
+        : job.source === "evoldir" && job.discussion_url
+          ? `<p class="detail-hint">EvolDir listings are email archives. Discussion happens on the mailing list, not on the archive page.</p>`
+          : "";
+
     const mapPane = job.map_geo
       ? `
       <div class="job-map-pane map-panel">
@@ -161,7 +179,8 @@
             ${job.number_applied != null ? `<div class="meta-item"><span class="meta-label">Applicants</span><span class="meta-value">${esc(job.number_applied)}</span></div>` : ""}
           </div>
           ${listingOnlyNote}
-          ${job.url ? `<a href="${esc(job.url)}" class="btn btn-primary btn-lg external-link" target="_blank" rel="noopener">Open official posting ↗</a>` : ""}
+          ${discussionHint}
+          ${actionLinks ? `<div class="detail-actions">${actionLinks}</div>` : ""}
           ${notesHtml ? `<section class="detail-section"><h2>Community notes</h2>${notesHtml}</section>` : ""}
           ${descriptionHtml}
           ${job.contact_email ? `<section class="detail-section"><h2>Contact</h2><p><a href="mailto:${esc(job.contact_email)}">${esc(job.contact_email)}</a></p></section>` : ""}

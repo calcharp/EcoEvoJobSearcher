@@ -14,6 +14,7 @@ from jobboards.db import init_db, job_date_bounds, job_stats, list_jobs
 from jobboards.config import ci_skip_geocode, is_github_actions, science_careers_fetch_details
 from jobboards.dates import days_until, format_display
 from jobboards.preview import can_preview, preview_target
+from jobboards.source_links import source_discussion_label, source_discussion_url
 from jobboards.geocode import (
     get_job_geo,
     get_place_map_status,
@@ -75,6 +76,8 @@ def enrich_export_job(job: dict[str, Any], include_detail: bool = False) -> dict
         _, open_url = preview_target(job)
         job["preview_open_url"] = open_url
         job["has_preview"] = can_preview(job)
+        job["discussion_url"] = source_discussion_url(job)
+        job["discussion_label"] = source_discussion_label(job)
     else:
         job.pop("description_raw", None)
         job.pop("notes_raw", None)

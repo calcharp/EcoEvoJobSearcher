@@ -27,15 +27,15 @@ def iter_tab_jobs(gid: str, tab_name: str, scraped_at: str) -> Iterator[dict[str
     next(reader, None)
     next(reader, None)
 
-    for row in reader:
+    for sheet_row, row in enumerate(reader, start=3):
         if not row or not row[0].strip():
             continue
         if not parse_ecoevo_datetime(row[0]):
             continue
         if tab_name == "faculty":
-            job = _parse_faculty_row(row, scraped_at)
+            job = _parse_faculty_row(row, scraped_at, sheet_row)
         else:
-            job = _parse_postdoc_row(row, scraped_at)
+            job = _parse_postdoc_row(row, scraped_at, sheet_row)
         if job:
             yield job
 
@@ -44,7 +44,7 @@ def fetch_tab(gid: str, tab_name: str, scraped_at: str) -> list[dict[str, Any]]:
     return list(iter_tab_jobs(gid, tab_name, scraped_at))
 
 
-def _parse_faculty_row(row: list[str], scraped_at: str) -> Optional[dict[str, Any]]:
+def _parse_faculty_row(row: list[str], scraped_at: str, sheet_row: int) -> Optional[dict[str, Any]]:
     while len(row) < 12:
         row.append("")
     ts, institution, location, subject, review_date, url, rank, pos_type, last_up, notes = row[:10]
@@ -60,7 +60,7 @@ def _parse_faculty_row(row: list[str], scraped_at: str) -> Optional[dict[str, An
         "id": make_id("ecoevojobs", "faculty", institution, url or ts, rank),
         "source": "ecoevojobs",
         "source_tab": "faculty",
-        "source_slug": None,
+        "source_slug": str(sheet_row),
         "institution": institution.strip(),
         "location": location.strip(),
         "subject_area": subject.strip(),
@@ -87,7 +87,7 @@ def _parse_faculty_row(row: list[str], scraped_at: str) -> Optional[dict[str, An
     }
 
 
-def _parse_postdoc_row(row: list[str], scraped_at: str) -> Optional[dict[str, Any]]:
+def _parse_postdoc_row(row: list[str], scraped_at: str, sheet_row: int) -> Optional[dict[str, Any]]:
     while len(row) < 10:
         row.append("")
     ts, institution, location, subject, pi, review_date, url, last_up, notes = row[:9]
@@ -100,7 +100,7 @@ def _parse_postdoc_row(row: list[str], scraped_at: str) -> Optional[dict[str, An
         "id": make_id("ecoevojobs", "postdoc", institution, url or ts, pi),
         "source": "ecoevojobs",
         "source_tab": "postdoc",
-        "source_slug": None,
+        "source_slug": str(sheet_row),
         "institution": institution.strip(),
         "location": location.strip(),
         "subject_area": subject.strip(),

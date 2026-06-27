@@ -1680,6 +1680,13 @@ a.active-filter-clear:hover {
   line-height: 1.45;
 }
 
+.detail-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.65rem;
+  margin-bottom: 1.5rem;
+}
+
 .detail-section {
   margin-top: 1.75rem;
   padding-top: 1.5rem;
