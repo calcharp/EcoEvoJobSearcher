@@ -348,7 +348,7 @@
 
     if (opts.fullscreenTarget) {
       const fullscreenTarget = opts.fullscreenTarget;
-      const fullscreenCtrl = L.control({ position: "topleft" });
+      const fullscreenCtrl = L.control({ position: "topright" });
       fullscreenCtrl.onAdd = function () {
         const div = L.DomUtil.create("div", "map-fullscreen-control leaflet-control");
         div.innerHTML = `
@@ -383,10 +383,10 @@
       fullscreenCtrl.addTo(map);
     }
 
-    L.control.zoom({ position: "topleft" }).addTo(map);
+    L.control.zoom({ position: "topright" }).addTo(map);
 
     if (opts.areaSelect) {
-      const toolbar = L.control({ position: "topright" });
+      const toolbar = L.control({ position: "topleft" });
       toolbar.onAdd = function () {
         const div = L.DomUtil.create("div", "map-area-toolbar");
         div.innerHTML = `
