@@ -4,6 +4,8 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <meta name="jobboards-base" content="{{ base_path }}">
+  <link rel="icon" href="{{ base_path }}static/img/logo.jpg" type="image/jpeg">
+  <link rel="apple-touch-icon" href="{{ base_path }}static/img/logo.jpg">
   <title>{% block title %}Eco &amp; Evo Jobs{% endblock %}</title>
   <script>
     (function () {
@@ -21,7 +23,9 @@
   <div class="app-shell">
     <header class="site-header">
       <div class="brand">
-        <div class="brand-icon" aria-hidden="true">🌿</div>
+        <div class="brand-icon" aria-hidden="true">
+          <img src="{{ base_path }}static/img/logo.jpg" alt="" width="48" height="48" decoding="async">
+        </div>
         <div>
           <h1 class="brand-title">Eco &amp; Evo Jobs</h1>
           <p class="brand-sub">ecoevojobs · EvolDir · Science Careers</p>
