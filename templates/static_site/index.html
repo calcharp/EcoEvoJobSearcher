@@ -55,32 +55,32 @@
     </select>
   </div>
   </div>
-  <div class="date-range-panel" id="date-range-panel">
-    <div class="date-range-header">
-      <select id="date-field-select" class="select select-sm" aria-label="Date field">
-        <option value="posted_at" selected>Posted date</option>
-        <option value="apply_by">Apply-by date</option>
-      </select>
-      <span class="date-range-label" id="date-range-label">All time</span>
+  <div class="toolbar-secondary">
+    <div class="filter-stack-wrap" id="filter-stack-wrap" hidden>
+      <span class="filter-stack-label">Active filters</span>
+      <div class="filter-stack" id="filter-stack"></div>
+      <button type="button" class="filter-stack-clear" id="filter-stack-clear">Clear all</button>
     </div>
-    <div class="date-range-slider" id="date-range-slider">
-      <div class="date-range-track-wrap">
-        <div class="date-range-notches" id="date-range-notches" aria-hidden="true"></div>
-        <div class="date-range-histogram" id="date-range-histogram" aria-hidden="true"></div>
-        <div class="date-range-track">
-          <div class="date-range-fill" id="date-range-fill"></div>
-          <button type="button" class="date-range-thumb" id="date-thumb-min" aria-label="Range start"></button>
-          <button type="button" class="date-range-thumb" id="date-thumb-max" aria-label="Range end"></button>
+    <div class="date-range-panel" id="date-range-panel">
+      <div class="date-range-header">
+        <select id="date-field-select" class="select select-sm" aria-label="Date field">
+          <option value="posted_at" selected>Posted date</option>
+          <option value="apply_by">Apply-by date</option>
+        </select>
+        <span class="date-range-label" id="date-range-label">All time</span>
+      </div>
+      <div class="date-range-slider" id="date-range-slider">
+        <div class="date-range-track-wrap">
+          <div class="date-range-notches" id="date-range-notches" aria-hidden="true"></div>
+          <div class="date-range-histogram" id="date-range-histogram" aria-hidden="true"></div>
+          <div class="date-range-track">
+            <div class="date-range-fill" id="date-range-fill"></div>
+            <button type="button" class="date-range-thumb" id="date-thumb-min" aria-label="Range start"></button>
+            <button type="button" class="date-range-thumb" id="date-thumb-max" aria-label="Range end"></button>
+          </div>
         </div>
       </div>
     </div>
-  </div>
-  <div class="filter-stack-wrap" id="filter-stack-wrap" hidden>
-    <div class="filter-stack-header">
-      <span class="filter-stack-label">Active filters</span>
-      <button type="button" class="filter-stack-clear" id="filter-stack-clear">Clear all</button>
-    </div>
-    <div class="filter-stack" id="filter-stack"></div>
   </div>
 </section>
 
