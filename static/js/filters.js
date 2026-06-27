@@ -47,6 +47,9 @@
         label: formatDateLabel(field, from, to),
       });
     }
+    if (params.get("open") === "1") {
+      filters.push({ id: makeId(), type: "open", label: "Open applications" });
+    }
     return filters;
   }
 
@@ -95,6 +98,17 @@
       return;
     }
 
+    if (filter.type === "open") {
+      if (stack.some((f) => f.type === "open")) return;
+      stack.push({
+        id: makeId(),
+        type: "open",
+        label: filter.label || "Open applications",
+      });
+      notify();
+      return;
+    }
+
     const val = (filter.value || "").trim();
     if (!val) return;
     if (stack.some((f) => f.type === filter.type && f.value.toLowerCase() === val.toLowerCase())) {
@@ -127,6 +141,19 @@
     return stack.find((f) => f.type === "date") || null;
   }
 
+  function isOpenFilterActive() {
+    return stack.some((f) => f.type === "open");
+  }
+
+  function toggleOpenFilter() {
+    if (isOpenFilterActive()) {
+      stack = stack.filter((f) => f.type !== "open");
+    } else {
+      stack.push({ id: makeId(), type: "open", label: "Open applications" });
+    }
+    notify();
+  }
+
   function buildApiParams(source, sort, order) {
     const params = new URLSearchParams({ source, sort, order });
     for (const f of stack) {
@@ -139,6 +166,8 @@
         params.set("date_field", f.field === "apply_by" ? "apply_by" : "posted_at");
         if (f.from) params.set("from", f.from);
         if (f.to) params.set("to", f.to);
+      } else if (f.type === "open") {
+        params.set("open", "1");
       }
     }
     return params;
@@ -170,6 +199,8 @@
     getStack: () => [...stack],
     getAreaFilter,
     getDateFilter,
+    isOpenFilterActive,
+    toggleOpenFilter,
     buildApiParams,
     toUrl,
     onChange,

@@ -39,6 +39,12 @@
     return true;
   }
 
+  function matchesOpen(job, openOnly) {
+    if (!openOnly) return true;
+    if (job.days_until == null) return true;
+    return job.days_until >= 0;
+  }
+
   function compareValues(a, b) {
     if (a == null && b == null) return 0;
     if (a == null) return 1;
@@ -61,6 +67,7 @@
     out = out.filter((j) => matchesSource(j, opts.source));
     out = out.filter((j) => matchesTerms(j, opts.terms));
     out = out.filter((j) => matchesDate(j, opts.dateRange));
+    out = out.filter((j) => matchesOpen(j, opts.openOnly));
     return sortJobs(out, opts.sort, opts.order);
   }
 

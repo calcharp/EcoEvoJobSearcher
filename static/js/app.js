@@ -16,7 +16,7 @@
   let pendingReloadOpts = null;
   let reloadTimer = null;
 
-  const FILTER_TYPE_LABELS = { search: "Search", keyword: "Keyword", area: "Area", date: "Date" };
+  const FILTER_TYPE_LABELS = { search: "Search", keyword: "Keyword", area: "Area", date: "Date", open: "Open" };
 
   function jobDetailHref(jobId) {
     return JobBoardsJobUrl(jobId);
@@ -199,6 +199,7 @@
       order: document.getElementById("order-filter")?.value || "desc",
       terms,
       dateRange: dateRange && (dateRange.from || dateRange.to) ? dateRange : null,
+      openOnly: stack.some((f) => f.type === "open"),
     };
   }
 
@@ -475,6 +476,12 @@
 
   function onFiltersChanged(filters) {
     renderFilterStack(filters);
+    const openToggle = document.getElementById("open-jobs-toggle");
+    if (openToggle && window.JobBoardsFilters) {
+      const active = JobBoardsFilters.isOpenFilterActive();
+      openToggle.classList.toggle("is-active", active);
+      openToggle.setAttribute("aria-pressed", active ? "true" : "false");
+    }
     if (window.JobBoardsFilters) {
       window.history.replaceState(null, "", JobBoardsFilters.toUrl());
     }
@@ -566,6 +573,10 @@
       JobBoardsFilters.clear();
       if (mapCtrl) mapCtrl.clearAreaBounds();
       if (dateRangeCtrl) dateRangeCtrl.resetToFull();
+    });
+    document.getElementById("open-jobs-toggle")?.addEventListener("click", () => {
+      if (!window.JobBoardsFilters) return;
+      JobBoardsFilters.toggleOpenFilter();
     });
     wireJobsListMapEvents();
     restoreMapAreaFromFilters();
