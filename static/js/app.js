@@ -9,6 +9,7 @@
   let allJobsCache = [];
   let allMapJobsCache = [];
   let mapStats = { mapped: 0, missing: 0, filteredTotal: 0 };
+  let geoSummary = null;
   let jobsLoadedOnce = false;
   let dateRangeCtrl = null;
   let resultsInFlight = false;
@@ -88,9 +89,51 @@
     return (sources || []).map((s) => `<span class="badge badge-${s}">${sourceLabel(s)}</span>`).join("");
   }
 
+  function jobMapStatus(job) {
+    if (job.map_status) return job.map_status;
+    if (job.map_geo) return "mapped";
+    if (allMapJobsCache.some((m) => m.id === job.id)) return "mapped";
+    return "unresolved";
+  }
+
+  function filteredMapBreakdown(jobs) {
+    let onMap = 0;
+    let unresolved = 0;
+    let pending = 0;
+    for (const job of jobs) {
+      const status = jobMapStatus(job);
+      if (status === "mapped") onMap += 1;
+      else if (status === "pending") pending += 1;
+      else unresolved += 1;
+    }
+    return { onMap, unresolved, pending, total: jobs.length };
+  }
+
+  function describeUnmappedCounts(unresolved, pending) {
+    const parts = [];
+    if (unresolved) {
+      parts.push(
+        `${unresolved} listing${unresolved === 1 ? "" : "s"} have no map pin — institution/location couldn't be matched to coordinates (this isn't a loading delay)`
+      );
+    }
+    if (pending) {
+      parts.push(
+        `${pending} listing${pending === 1 ? "" : "s"} from new institutions may appear on the map after the next site update`
+      );
+    }
+    return parts.join(". ");
+  }
+
   function renderJobCard(job) {
     const dc = deadlineClass(job.days_until);
     const dl = deadlineLabel(job.days_until);
+    const mapStatus = jobMapStatus(job);
+    const onMap = mapStatus === "mapped";
+    const locateTitle = onMap
+      ? "Show on map"
+      : mapStatus === "pending"
+        ? "Map location not available yet"
+        : "No map location — institution couldn't be matched";
     const notes = job.has_notes_thread || (job.notes_thread && job.notes_thread.length > 1)
       ? `<span class="note-indicator">💬 notes</span>`
       : job.source === "evoldir" && job.post_size
@@ -114,7 +157,7 @@
           </div>
         </a>
         <div class="job-card-actions">
-          <button type="button" class="job-card-action job-card-locate" data-job-id="${esc(job.id)}" title="Show on map" aria-label="Show on map">⌖</button>
+          <button type="button" class="job-card-action job-card-locate${onMap ? "" : " is-unmapped"}" data-job-id="${esc(job.id)}" data-map-status="${mapStatus}" title="${esc(locateTitle)}" aria-label="${esc(locateTitle)}"${onMap ? "" : " disabled"}>⌖</button>
         </div>
       </div>`;
   }
@@ -197,12 +240,40 @@
     return "No jobs match your filters.";
   }
 
-  function updateMapFootnote() {
+  function updateMapFootnote(highlightJob) {
     const footnote = document.getElementById("map-footnote");
+    const detail = document.getElementById("map-footnote-detail");
     if (!footnote) return;
-    const mapped = getMapJobsForList().length;
-    const missing = mapStats.missing;
-    const filteredTotal = JobBoardsStaticQuery.filterJobs(allJobsCache, getFilterOpts()).length;
+
+    if (highlightJob) {
+      const job = typeof highlightJob === "object"
+        ? highlightJob
+        : allJobsCache.find((j) => j.id === highlightJob);
+      if (job && detail) {
+        const status = jobMapStatus(job);
+        const place = [job.institution, job.location].filter(Boolean).join(", ");
+        if (status === "pending") {
+          detail.textContent = `${place} hasn't been mapped yet. New institutions are added when the site is rebuilt.`;
+        } else if (status === "unresolved") {
+          detail.textContent = `${place} couldn't be matched to map coordinates. The job is still listed above — use the institution and location fields to search elsewhere.`;
+        } else {
+          detail.textContent = "";
+          detail.hidden = true;
+          return;
+        }
+        detail.hidden = false;
+        return;
+      }
+    }
+
+    if (detail && !highlightJob) {
+      detail.textContent = "";
+      detail.hidden = true;
+    }
+
+    const filtered = JobBoardsStaticQuery.filterJobs(allJobsCache, getFilterOpts());
+    const { onMap, unresolved, pending, total } = filteredMapBreakdown(filtered);
+    const offMap = total - onMap;
     const filterCount = window.JobBoardsFilters?.getStack().length || 0;
     const filterNote = filterCount
       ? ` · ${filterCount} active filter${filterCount === 1 ? "" : "s"}`
@@ -212,23 +283,46 @@
 
     if (hasArea) {
       footnote.textContent = listCount
-        ? `${listCount} job${listCount === 1 ? "" : "s"} in the selected area`
-          + (filteredTotal > listCount
-            ? ` (${filteredTotal - listCount} outside area or not on map)`
+        ? `${listCount} listing${listCount === 1 ? "" : "s"} in the selected map area`
+          + (total > listCount
+            ? ` (${total - listCount} filtered listing${total - listCount === 1 ? "" : "s"} outside this area or without a map pin)`
             : "")
-        : filteredTotal
-          ? `${filteredTotal} matching job${filteredTotal === 1 ? "" : "s"}, but none are on the map in this area yet.`
+        : total
+          ? `${total} matching listing${total === 1 ? "" : "s"}, but none with a map pin fall in this area.`
           : "No jobs match the current filters.";
+      if (detail && offMap > 0 && !listCount) {
+        detail.textContent = describeUnmappedCounts(unresolved, pending);
+        detail.hidden = !detail.textContent;
+      }
       return;
     }
 
-    footnote.textContent = mapped
-      ? `Showing ${mapped} of ${filteredTotal} filtered job${filteredTotal === 1 ? "" : "s"} on the map`
-        + (missing ? ` (${missing} not geocoded yet)` : "")
-        + filterNote
-      : filteredTotal
-        ? `${filteredTotal} filtered job${filteredTotal === 1 ? "" : "s"} found, but none are geocoded yet.${filterNote}`
-        : "No jobs match the current filters.";
+    if (!total) {
+      footnote.textContent = "No jobs match the current filters.";
+      return;
+    }
+
+    if (!onMap) {
+      footnote.textContent = `${total} matching listing${total === 1 ? "" : "s"}, none with a map pin.${filterNote}`;
+      if (detail) {
+        detail.textContent = describeUnmappedCounts(unresolved, pending);
+        detail.hidden = !detail.textContent;
+      }
+      return;
+    }
+
+    footnote.textContent = `${onMap} of ${total} matching listing${total === 1 ? "" : "s"} on the map${filterNote}`;
+
+    if (detail && offMap > 0) {
+      detail.textContent = describeUnmappedCounts(unresolved, pending);
+      detail.hidden = !detail.textContent;
+    } else if (detail && geoSummary && geoSummary.jobs_unmapped > 0 && filterCount === 0) {
+      detail.textContent = describeUnmappedCounts(
+        geoSummary.jobs_unresolved || 0,
+        geoSummary.jobs_pending || 0
+      );
+      detail.hidden = !detail.textContent;
+    }
   }
 
   function renderJobsList(list, jobs) {
@@ -330,6 +424,7 @@
     }
     allJobsCache = jobsData.jobs || [];
     allMapJobsCache = mapData.jobs || [];
+    geoSummary = mapData.geo_summary || meta.map_summary || null;
     mapStats = {
       mapped: mapData.mapped || allMapJobsCache.length,
       missing: mapData.missing || 0,
@@ -440,8 +535,8 @@
       e.stopPropagation();
       const jobId = btn.dataset.jobId;
       if (!focusJobOnMap(jobId)) {
-        const footnote = document.getElementById("map-footnote");
-        if (footnote) footnote.textContent = "This listing is not on the map yet.";
+        const job = allJobsCache.find((j) => j.id === jobId);
+        if (job) updateMapFootnote(job);
       }
     });
 

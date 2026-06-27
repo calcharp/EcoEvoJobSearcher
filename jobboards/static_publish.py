@@ -16,8 +16,10 @@ from jobboards.dates import days_until, format_display
 from jobboards.preview import can_preview, preview_target
 from jobboards.geocode import (
     get_job_geo,
+    get_place_map_status,
     import_geo_cache,
     list_map_jobs,
+    map_coverage_summary,
     run_geocode_all,
 )
 from jobboards.notes import parse_notes_thread
@@ -55,6 +57,9 @@ def enrich_export_job(job: dict[str, Any], include_detail: bool = False) -> dict
     job["has_notes_thread"] = len(job["notes_thread"]) > 1
 
     geo = get_job_geo(job.get("institution", ""), job.get("location"))
+    job["map_status"] = get_place_map_status(
+        job.get("institution", ""), job.get("location")
+    )
     if geo:
         job["map_geo"] = {
             "id": job["id"],
@@ -163,6 +168,7 @@ def publish(
     export_jobs = [enrich_export_job(job, include_detail=True) for job in all_jobs]
 
     mapped, missing = list_map_jobs(sort="posted_at", order="desc")
+    geo_summary = map_coverage_summary()
     stats = job_stats()
     bounds = job_date_bounds()
     terms = subject_term_counts(min_count=2)
@@ -173,7 +179,12 @@ def publish(
         "generated_at": generated_at,
         "last_fetched_at": stats.get("last_fetched_at"),
         "stats": stats,
-        "map_summary": {"mapped": len(mapped), "missing": missing, "filtered_total": len(all_jobs)},
+        "map_summary": {
+            "mapped": len(mapped),
+            "missing": missing,
+            "filtered_total": len(all_jobs),
+            **geo_summary,
+        },
         "scrape_warnings": scrape_warnings,
     })
     write_json(data_dir / "jobs.json", {"jobs": export_jobs, "stats": stats})
@@ -186,6 +197,7 @@ def publish(
         "mapped": len(mapped),
         "missing": missing,
         "filtered_total": len(all_jobs),
+        "geo_summary": geo_summary,
     })
     write_json(data_dir / "date-bounds.json", bounds)
     write_json(data_dir / "subject-cloud.json", {

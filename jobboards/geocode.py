@@ -347,6 +347,73 @@ def geo_stats() -> dict[str, int]:
     }
 
 
+def get_place_map_status(institution: str, location: Optional[str] = None) -> str:
+    """Return mapped | unresolved | pending | no_institution."""
+    if not (institution or "").strip():
+        return "no_institution"
+    key = place_key(institution, location or "")
+    with connect() as conn:
+        row = conn.execute(
+            "SELECT lat FROM geo_cache WHERE place_key = ?",
+            (key,),
+        ).fetchone()
+    if not row:
+        return "pending"
+    if row["lat"] is not None:
+        return "mapped"
+    return "unresolved"
+
+
+def map_coverage_summary() -> dict[str, int]:
+    """Job- and place-level map coverage for the static site."""
+    stats = geo_stats()
+    with connect() as conn:
+        jobs_on_map = conn.execute(
+            """
+            SELECT COUNT(*) AS c FROM jobs j
+            INNER JOIN geo_cache g
+              ON g.institution = j.institution
+             AND COALESCE(g.location, '') = COALESCE(j.location, '')
+            WHERE COALESCE(j.institution, '') != ''
+              AND g.lat IS NOT NULL
+            """
+        ).fetchone()["c"]
+        jobs_unresolved = conn.execute(
+            """
+            SELECT COUNT(*) AS c FROM jobs j
+            INNER JOIN geo_cache g
+              ON g.institution = j.institution
+             AND COALESCE(g.location, '') = COALESCE(j.location, '')
+            WHERE COALESCE(j.institution, '') != ''
+              AND g.lat IS NULL
+            """
+        ).fetchone()["c"]
+        jobs_pending = conn.execute(
+            """
+            SELECT COUNT(*) AS c FROM jobs j
+            LEFT JOIN geo_cache g
+              ON g.institution = j.institution
+             AND COALESCE(g.location, '') = COALESCE(j.location, '')
+            WHERE COALESCE(j.institution, '') != ''
+              AND g.place_key IS NULL
+            """
+        ).fetchone()["c"]
+        total_jobs = conn.execute(
+            "SELECT COUNT(*) AS c FROM jobs WHERE COALESCE(institution, '') != ''"
+        ).fetchone()["c"]
+    return {
+        "jobs_total": total_jobs,
+        "jobs_on_map": jobs_on_map,
+        "jobs_unmapped": total_jobs - jobs_on_map,
+        "jobs_unresolved": jobs_unresolved,
+        "jobs_pending": jobs_pending,
+        "places_total": stats["total_places"],
+        "places_mapped": stats["cached"],
+        "places_unresolved": stats["failed"],
+        "places_pending": stats["pending"],
+    }
+
+
 def get_geo_for_keys(keys: list[str]) -> dict[str, dict[str, Any]]:
     if not keys:
         return {}

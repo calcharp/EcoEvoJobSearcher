@@ -846,6 +846,18 @@ a.active-filter-clear:hover {
   color: var(--blue);
 }
 
+.job-card-locate.is-unmapped {
+  color: var(--text-muted);
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.job-card-locate.is-unmapped:hover {
+  border-color: var(--border);
+  background: transparent;
+  color: var(--text-muted);
+}
+
 .job-card {
   display: block;
   background: var(--bg-surface);
@@ -1222,10 +1234,19 @@ a.active-filter-clear:hover {
 
 .map-footnote {
   margin: 0;
-  padding: 0.65rem 0.9rem;
+  padding: 0.65rem 0.9rem 0.25rem;
   font-size: 0.82rem;
   color: var(--text-muted);
   border-top: 1px solid var(--border);
+}
+
+.map-footnote-detail {
+  margin: 0;
+  padding: 0 0.9rem 0.65rem;
+  font-size: 0.78rem;
+  line-height: 1.45;
+  color: var(--text-muted);
+  border-top: none;
 }
 
 .map-popup {
