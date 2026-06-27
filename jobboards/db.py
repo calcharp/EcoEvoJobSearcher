@@ -93,9 +93,7 @@ def init_db():
     with connect() as conn:
         conn.executescript(SCHEMA)
         from jobboards.geocode import init_geo_schema
-        from jobboards.user_data import init_user_schema
         init_geo_schema(conn)
-        init_user_schema(conn)
 
 
 def clear_source(conn: sqlite3.Connection, source: str):
@@ -185,10 +183,7 @@ def list_jobs(
     date_field: Optional[str] = None,
     date_from: Optional[str] = None,
     date_to: Optional[str] = None,
-    view: str = "all",
 ) -> list[dict[str, Any]]:
-    from jobboards.user_data import get_dismissed_job_ids, get_saved_job_ids
-
     allowed_sort = {"apply_by", "posted_at", "updated_at", "institution"}
     sort_col = sort if sort in allowed_sort else "apply_by"
     order_sql = "DESC" if order.lower() == "desc" else "ASC"
@@ -198,32 +193,6 @@ def list_jobs(
     if source and source != "all":
         clauses.append("source = ?")
         params.append(source)
-
-    if view == "saved":
-        saved_ids = get_saved_job_ids()
-        if not saved_ids:
-            return []
-        placeholders = ", ".join("?" for _ in saved_ids)
-        clauses.append(f"id IN ({placeholders})")
-        params.extend(saved_ids)
-        dismissed_ids = get_dismissed_job_ids()
-        if dismissed_ids:
-            placeholders = ", ".join("?" for _ in dismissed_ids)
-            clauses.append(f"id NOT IN ({placeholders})")
-            params.extend(dismissed_ids)
-    elif view == "dismissed":
-        dismissed_ids = get_dismissed_job_ids()
-        if not dismissed_ids:
-            return []
-        placeholders = ", ".join("?" for _ in dismissed_ids)
-        clauses.append(f"id IN ({placeholders})")
-        params.extend(dismissed_ids)
-    else:
-        dismissed_ids = get_dismissed_job_ids()
-        if dismissed_ids:
-            placeholders = ", ".join("?" for _ in dismissed_ids)
-            clauses.append(f"id NOT IN ({placeholders})")
-            params.extend(dismissed_ids)
 
     all_terms: list[str] = []
     if terms:

@@ -19,7 +19,7 @@ concurrency:
 jobs:
   deploy:
     runs-on: ubuntu-latest
-    timeout-minutes: 90
+    timeout-minutes: 120
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
@@ -47,8 +47,6 @@ jobs:
 
       - name: Build static site
         run: python scripts/publish_static.py --out _site
-        env:
-          GEOCODE_LIMIT: "400"
 
       - name: Save jobs database cache
         if: always()

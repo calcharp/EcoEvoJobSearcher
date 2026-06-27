@@ -230,8 +230,6 @@ def scrape_all(
         )
         from jobboards.subjects import clear_subject_cache
         clear_subject_cache()
-        from jobboards.geocode import start_geocoder_daemon
-        start_geocoder_daemon()
     except Exception as exc:
         state.update(
             error=str(exc),

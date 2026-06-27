@@ -126,7 +126,6 @@
         const data = await res.json();
         job = (data.jobs || []).find((j) => j.id === id) || null;
       }
-      if (job) JobBoardsStore.attachUserFlags([job]);
       renderDetail(job);
     } catch {
       renderDetail(null);

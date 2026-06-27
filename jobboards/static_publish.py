@@ -11,8 +11,8 @@ from typing import Any
 
 from jobboards.db import init_db, job_date_bounds, job_stats, list_jobs
 from jobboards.dates import days_until, format_display
-from jobboards.embed import can_preview, preview_target
-from jobboards.geocode import get_job_geo, list_map_jobs, run_geocode_batch
+from jobboards.preview import can_preview, preview_target
+from jobboards.geocode import get_job_geo, list_map_jobs, run_geocode_all
 from jobboards.notes import parse_notes_thread
 from jobboards.scrape.runner import ScrapeState, scrape_all
 from jobboards.subjects import subject_term_counts
@@ -70,15 +70,8 @@ def enrich_export_job(job: dict[str, Any], include_detail: bool = False) -> dict
     return job
 
 
-def geocode_pending_loop(max_places: int = 600) -> int:
-    total = 0
-    while total < max_places:
-        batch = min(40, max_places - total)
-        done = run_geocode_batch(max_places=batch)
-        if done == 0:
-            break
-        total += done
-    return total
+def geocode_pending_loop(max_places: int | None = None) -> int:
+    return run_geocode_all(max_total=max_places)
 
 
 def write_json(path: Path, payload: Any) -> None:
@@ -119,7 +112,7 @@ def publish(
     *,
     base_path: str | None = None,
     scrape: bool = True,
-    geocode_limit: int = 600,
+    geocode_limit: int | None = None,
 ) -> dict[str, Any]:
     base_path = base_path if base_path is not None else pages_base_path()
     out_dir = out_dir.resolve()
@@ -138,14 +131,11 @@ def publish(
         if state.phase == "error" or job_stats().get("total", 0) == 0:
             raise RuntimeError(state.error or "Scrape failed with no jobs")
 
-    if geocode_limit > 0:
+    if geocode_limit != 0:
         geocode_pending_loop(geocode_limit)
 
     all_jobs = list_jobs(sort="posted_at", order="desc")
     export_jobs = [enrich_export_job(job, include_detail=True) for job in all_jobs]
-    for job in export_jobs:
-        job["is_saved"] = False
-        job["is_dismissed"] = False
 
     mapped, missing = list_map_jobs(sort="posted_at", order="desc")
     stats = job_stats()

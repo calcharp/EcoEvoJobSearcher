@@ -50,13 +50,12 @@
         </button>
       </div>
     </header>
-    <p class="static-site-note" id="static-site-note">Static site · data refreshes when GitHub Actions runs</p>
+    <p class="static-site-note" id="static-site-note">Data refreshes when GitHub Actions runs</p>
     <main class="main-content">
       {% block content %}{% endblock %}
     </main>
   </div>
   <script src="{{ base_path }}static/js/static-boot.js"></script>
-  <script src="{{ base_path }}static/js/static-store.js"></script>
   <script src="{{ base_path }}static/js/static-query.js"></script>
   <script src="{{ base_path }}static/js/app.js"></script>
   {% block scripts %}{% endblock %}

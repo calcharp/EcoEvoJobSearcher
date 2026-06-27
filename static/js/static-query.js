@@ -57,67 +57,15 @@
   }
 
   function filterJobs(jobs, opts) {
-    const view = opts.view || "all";
-    const saved = new Set(opts.savedIds || []);
-    const dismissed = new Set(opts.dismissedIds || []);
     let out = jobs;
-
-    if (view === "saved") {
-      out = out.filter((j) => saved.has(j.id) && !dismissed.has(j.id));
-    } else if (view === "dismissed") {
-      out = out.filter((j) => dismissed.has(j.id));
-    } else {
-      out = out.filter((j) => !dismissed.has(j.id));
-    }
-
     out = out.filter((j) => matchesSource(j, opts.source));
     out = out.filter((j) => matchesTerms(j, opts.terms));
     out = out.filter((j) => matchesDate(j, opts.dateRange));
     return sortJobs(out, opts.sort, opts.order);
   }
 
-  function filterMapJobs(mapJobs, jobIds) {
-    const ids = jobIds instanceof Set ? jobIds : new Set(jobIds);
-    return mapJobs.filter((j) => ids.has(j.id));
-  }
-
-  function filterCloudTerms(terms, prefs) {
-    const ignore = new Set((prefs.ignore || []).map((p) => p.toLowerCase()));
-    const watch = new Set((prefs.watch || []).map((p) => p.toLowerCase()));
-    const out = [];
-    const seen = new Set();
-
-    for (const item of terms || []) {
-      const key = String(item.term || "").toLowerCase();
-      if (!key || ignore.has(key) || seen.has(key)) continue;
-      seen.add(key);
-      out.push({
-        term: item.term,
-        count: item.count || 0,
-        watch: watch.has(key) || !!item.watch,
-      });
-    }
-
-    for (const phrase of prefs.watch || []) {
-      const key = phrase.toLowerCase();
-      if (ignore.has(key) || seen.has(key)) continue;
-      seen.add(key);
-      const existing = (terms || []).find((t) => String(t.term).toLowerCase() === key);
-      out.push({
-        term: phrase,
-        count: existing ? existing.count || 0 : 0,
-        watch: true,
-      });
-    }
-
-    out.sort((a, b) => b.count - a.count || String(a.term).localeCompare(String(b.term)));
-    return out;
-  }
-
   window.JobBoardsStaticQuery = {
     filterJobs,
-    filterMapJobs,
-    filterCloudTerms,
     jobMatchesTerm,
   };
 })();

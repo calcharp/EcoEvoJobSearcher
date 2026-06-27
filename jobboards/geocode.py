@@ -1,7 +1,6 @@
-import hashlib
 import re
-import threading
 import time
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime, timezone
 from typing import Any, Optional
 
@@ -9,9 +8,12 @@ import requests
 
 from jobboards.db import connect, make_id
 
+PHOTON_URL = "https://photon.komoot.io/api/"
 NOMINATIM_URL = "https://nominatim.openstreetmap.org/search"
-USER_AGENT = "JobBoards/0.1 (local academic job aggregator; contact=local)"
-GEOCODE_DELAY_SEC = 1.05
+USER_AGENT = "EcoEvoJobSearcher/1.0 (github.com/calcharp/EcoEvoJobSearcher)"
+GEOCODE_WORKERS = 12
+GEOCODE_BATCH_SIZE = 200
+NOMINATIM_DELAY_SEC = 1.05
 
 US_STATES = {
     "alabama", "alaska", "arizona", "arkansas", "california", "colorado",
@@ -42,9 +44,6 @@ CAMPUS_TYPES = {
     "university", "college", "museum", "research_institute", "school",
     "hospital", "library", "zoo", "aquarium",
 }
-
-_geo_lock = threading.Lock()
-_geo_daemon_started = False
 
 
 def init_geo_schema(conn) -> None:
@@ -123,7 +122,23 @@ def build_geo_query(institution: str, location: Optional[str]) -> str:
     return inst
 
 
-def _classify_precision(result: dict[str, Any]) -> str:
+def _classify_photon_precision(props: dict[str, Any]) -> str:
+    typ = (props.get("type") or props.get("osm_value") or "").lower()
+    if typ in CAMPUS_TYPES or any(
+        word in (props.get("name") or "").lower()
+        for word in ("university", "college", "museum", "institute", "zoo")
+    ):
+        return "campus"
+    if typ in {"city", "town", "village", "hamlet", "locality"}:
+        return "city"
+    if typ in {"state", "region", "county", "administrative"}:
+        return "region"
+    if typ == "country":
+        return "country"
+    return "city"
+
+
+def _classify_nominatim_precision(result: dict[str, Any]) -> str:
     typ = (result.get("type") or "").lower()
     category = (result.get("category") or "").lower()
     name = (result.get("display_name") or "").lower()
@@ -146,7 +161,42 @@ def _classify_precision(result: dict[str, Any]) -> str:
     return "region"
 
 
-def geocode_query(query: str) -> Optional[dict[str, Any]]:
+def _geocode_photon(query: str) -> Optional[dict[str, Any]]:
+    try:
+        resp = requests.get(
+            PHOTON_URL,
+            params={"q": query, "limit": 1},
+            headers={"User-Agent": USER_AGENT},
+            timeout=12,
+        )
+        resp.raise_for_status()
+        features = resp.json().get("features") or []
+        if not features:
+            return None
+        hit = features[0]
+        coords = hit.get("geometry", {}).get("coordinates") or []
+        if len(coords) < 2:
+            return None
+        lon, lat = float(coords[0]), float(coords[1])
+        props = hit.get("properties") or {}
+        parts = [
+            props.get("name"),
+            props.get("city"),
+            props.get("state"),
+            props.get("country"),
+        ]
+        display_name = ", ".join(p for p in parts if p)
+        return {
+            "lat": lat,
+            "lon": lon,
+            "precision": _classify_photon_precision(props),
+            "display_name": display_name or query,
+        }
+    except (requests.RequestException, ValueError, KeyError, TypeError):
+        return None
+
+
+def _geocode_nominatim(query: str) -> Optional[dict[str, Any]]:
     try:
         resp = requests.get(
             NOMINATIM_URL,
@@ -167,11 +217,19 @@ def geocode_query(query: str) -> Optional[dict[str, Any]]:
         return {
             "lat": float(hit["lat"]),
             "lon": float(hit["lon"]),
-            "precision": _classify_precision(hit),
+            "precision": _classify_nominatim_precision(hit),
             "display_name": hit.get("display_name"),
         }
     except (requests.RequestException, ValueError, KeyError, TypeError):
         return None
+
+
+def geocode_query(query: str) -> Optional[dict[str, Any]]:
+    result = _geocode_photon(query)
+    if result:
+        return result
+    time.sleep(NOMINATIM_DELAY_SEC)
+    return _geocode_nominatim(query)
 
 
 def save_geo_cache(
@@ -235,7 +293,7 @@ def get_pending_places(limit: int = 100) -> list[tuple[str, str, str]]:
               ON g.institution = j.institution
              AND COALESCE(g.location, '') = COALESCE(j.location, '')
             WHERE COALESCE(j.institution, '') != ''
-              AND g.place_key IS NULL
+              AND (g.place_key IS NULL OR g.lat IS NULL)
             LIMIT ?
             """,
             (limit,),
@@ -308,7 +366,6 @@ def list_map_jobs(
     date_field: Optional[str] = None,
     date_from: Optional[str] = None,
     date_to: Optional[str] = None,
-    view: str = "all",
 ) -> tuple[list[dict[str, Any]], int]:
     from jobboards.db import list_jobs
 
@@ -321,7 +378,6 @@ def list_map_jobs(
         date_field=date_field,
         date_from=date_from,
         date_to=date_to,
-        view=view,
     )
     if not jobs:
         return [], 0
@@ -358,32 +414,31 @@ def list_map_jobs(
     return mapped, len(jobs) - sum(1 for key in keys if key in geo_map)
 
 
-def run_geocode_batch(max_places: int = 40) -> int:
+def run_geocode_batch(max_places: int = GEOCODE_BATCH_SIZE) -> int:
     pending = get_pending_places(limit=max_places)
-    done = 0
-    for _, inst, loc in pending:
-        geocode_place(inst, loc or None)
-        done += 1
-        time.sleep(GEOCODE_DELAY_SEC)
-    return done
+    if not pending:
+        return 0
+    with ThreadPoolExecutor(max_workers=GEOCODE_WORKERS) as pool:
+        futures = [
+            pool.submit(geocode_place, inst, loc or None)
+            for _, inst, loc in pending
+        ]
+        for future in as_completed(futures):
+            future.result()
+    return len(pending)
 
 
-def start_geocoder_daemon() -> None:
-    global _geo_daemon_started
-    with _geo_lock:
-        if _geo_daemon_started:
-            return
-        _geo_daemon_started = True
-
-    def _loop():
-        while True:
-            try:
-                processed = run_geocode_batch(max_places=30)
-                if processed == 0:
-                    time.sleep(30)
-                else:
-                    time.sleep(3)
-            except Exception:
-                time.sleep(15)
-
-    threading.Thread(target=_loop, daemon=True, name="geocoder").start()
+def run_geocode_all(max_total: Optional[int] = None) -> int:
+    """Geocode all pending places. max_total=None means no limit."""
+    total = 0
+    while True:
+        if max_total is not None and total >= max_total:
+            break
+        batch_limit = GEOCODE_BATCH_SIZE
+        if max_total is not None:
+            batch_limit = min(batch_limit, max_total - total)
+        done = run_geocode_batch(max_places=batch_limit)
+        if done == 0:
+            break
+        total += done
+    return total
