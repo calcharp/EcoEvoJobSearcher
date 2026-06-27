@@ -111,7 +111,7 @@
 
   function createController(container, options) {
     const opts = options || {};
-    const map = L.map(container, { scrollWheelZoom: true }).setView([30, 0], 2);
+    const map = L.map(container, { scrollWheelZoom: true, zoomControl: false }).setView([30, 0], 2);
     L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
       attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
       maxZoom: 18,
@@ -346,58 +346,61 @@
       if (onAreaSelected) onAreaSelected(bounds);
     }
 
-    if (opts.areaSelect || opts.fullscreenTarget) {
-      const fullscreenTarget = opts.fullscreenTarget || null;
-      const toolbar = L.control({ position: "topright" });
-      toolbar.onAdd = function () {
-        const div = L.DomUtil.create("div", "map-area-toolbar");
-        let html = "";
-        if (opts.areaSelect) {
-          html += `
-          <button type="button" class="map-tool-btn" data-action="select" title="Draw a rectangle to filter jobs">Select area</button>
-          <button type="button" class="map-tool-btn" data-action="clear" title="Clear map area filter" hidden>Clear</button>`;
-        }
-        if (fullscreenTarget) {
-          html += `
+    if (opts.fullscreenTarget) {
+      const fullscreenTarget = opts.fullscreenTarget;
+      const fullscreenCtrl = L.control({ position: "topleft" });
+      fullscreenCtrl.onAdd = function () {
+        const div = L.DomUtil.create("div", "map-fullscreen-control leaflet-control");
+        div.innerHTML = `
           <button type="button" class="map-tool-btn map-tool-btn-icon" data-action="fullscreen" title="Toggle fullscreen map" aria-label="Toggle fullscreen map">
             <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true">
               <path fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" d="M8 4H4v4M16 4h4v4M8 20H4v-4M16 20h4v-4"/>
             </svg>
           </button>`;
-        }
-        div.innerHTML = html;
         L.DomEvent.disableClickPropagation(div);
         L.DomEvent.disableScrollPropagation(div);
-        if (opts.areaSelect) {
-          selectBtn = div.querySelector('[data-action="select"]');
-          clearBtn = div.querySelector('[data-action="clear"]');
-          selectBtn.addEventListener("click", () => setSelectMode(!selectMode));
-          clearBtn.addEventListener("click", () => {
-            clearAreaBounds();
-            if (onAreaSelected) onAreaSelected(null);
-          });
-        }
         const fullscreenBtn = div.querySelector('[data-action="fullscreen"]');
-        if (fullscreenBtn && fullscreenTarget) {
-          const syncFullscreen = () => {
-            const active = document.fullscreenElement === fullscreenTarget;
-            fullscreenBtn.classList.toggle("is-active", active);
-            fullscreenBtn.title = active ? "Exit fullscreen" : "Toggle fullscreen map";
-            fullscreenBtn.setAttribute(
-              "aria-label",
-              active ? "Exit fullscreen map" : "Toggle fullscreen map"
-            );
-            setTimeout(() => map.invalidateSize(), 120);
-          };
-          fullscreenBtn.addEventListener("click", () => {
-            if (document.fullscreenElement === fullscreenTarget) {
-              document.exitFullscreen?.();
-            } else {
-              fullscreenTarget.requestFullscreen?.();
-            }
-          });
-          document.addEventListener("fullscreenchange", syncFullscreen);
-        }
+        const syncFullscreen = () => {
+          const active = document.fullscreenElement === fullscreenTarget;
+          fullscreenBtn.classList.toggle("is-active", active);
+          fullscreenBtn.title = active ? "Exit fullscreen" : "Toggle fullscreen map";
+          fullscreenBtn.setAttribute(
+            "aria-label",
+            active ? "Exit fullscreen map" : "Toggle fullscreen map"
+          );
+          setTimeout(() => map.invalidateSize(), 120);
+        };
+        fullscreenBtn.addEventListener("click", () => {
+          if (document.fullscreenElement === fullscreenTarget) {
+            document.exitFullscreen?.();
+          } else {
+            fullscreenTarget.requestFullscreen?.();
+          }
+        });
+        document.addEventListener("fullscreenchange", syncFullscreen);
+        return div;
+      };
+      fullscreenCtrl.addTo(map);
+    }
+
+    L.control.zoom({ position: "topleft" }).addTo(map);
+
+    if (opts.areaSelect) {
+      const toolbar = L.control({ position: "topright" });
+      toolbar.onAdd = function () {
+        const div = L.DomUtil.create("div", "map-area-toolbar");
+        div.innerHTML = `
+          <button type="button" class="map-tool-btn" data-action="select" title="Draw a rectangle to filter jobs">Select area</button>
+          <button type="button" class="map-tool-btn" data-action="clear" title="Clear map area filter" hidden>Clear</button>`;
+        L.DomEvent.disableClickPropagation(div);
+        L.DomEvent.disableScrollPropagation(div);
+        selectBtn = div.querySelector('[data-action="select"]');
+        clearBtn = div.querySelector('[data-action="clear"]');
+        selectBtn.addEventListener("click", () => setSelectMode(!selectMode));
+        clearBtn.addEventListener("click", () => {
+          clearAreaBounds();
+          if (onAreaSelected) onAreaSelected(null);
+        });
         return div;
       };
       toolbar.addTo(map);

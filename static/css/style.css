@@ -1488,6 +1488,14 @@ a.active-filter-clear:hover {
   gap: 0.35rem;
 }
 
+.map-fullscreen-control {
+  margin-bottom: 0.35rem;
+}
+
+.map-fullscreen-control .map-tool-btn-icon {
+  box-shadow: var(--shadow-md);
+}
+
 .map-tool-btn {
   padding: 0.4rem 0.65rem;
   border: 1px solid var(--border-strong);
