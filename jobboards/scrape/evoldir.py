@@ -11,13 +11,14 @@ from jobboards.config import (
     EVOLDIR_DETAIL_BASE,
     EVOLDIR_INDEX,
     EVOLDIR_PARALLEL_WORKERS,
+    HTTP_HEADERS,
     JOB_URL_PATTERNS,
 )
 from jobboards.dates import parse_deadline_from_slug, parse_deadline_from_text, parse_evoldir_posted
 from jobboards.db import make_id, normalize_url, upsert_job
 
 SESSION = requests.Session()
-SESSION.headers.update({"User-Agent": "JobBoards/0.1 (local academic job aggregator)"})
+SESSION.headers.update(HTTP_HEADERS)
 
 INDEX_PATTERN = re.compile(
     r'<a href="(/brian/evoldir/Jobs//[^"]+)">([^<]+)</a>\s+'

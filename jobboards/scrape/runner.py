@@ -13,6 +13,7 @@ class ScrapeState:
     running: bool = False
     message: str = "Idle"
     error: Optional[str] = None
+    warnings: list[str] = field(default_factory=list)
     phase: str = "idle"
     progress_percent: int = 0
     ecoevo_count: int = 0
@@ -36,6 +37,7 @@ class ScrapeState:
                 "running": self.running,
                 "message": self.message,
                 "error": self.error,
+                "warnings": list(self.warnings),
                 "phase": self.phase,
                 "progress_percent": self.progress_percent,
                 "ecoevo_count": self.ecoevo_count,
@@ -108,12 +110,16 @@ def build_progress_detail(snap: dict, stats: dict, batch_stats: Optional[dict] =
     return snap.get("message", "")
 
 
-def scrape_all(state: ScrapeState, skip_evoldir: bool = False) -> None:
+def scrape_all(
+    state: ScrapeState,
+    skip_evoldir: bool = False,
+) -> None:
     with state._lock:
         if state.running:
             return
         state.running = True
         state.error = None
+        state.warnings = []
         state.ecoevo_count = 0
         state.ecoevo_done = 0
         state.ecoevo_total = 0
@@ -128,67 +134,99 @@ def scrape_all(state: ScrapeState, skip_evoldir: bool = False) -> None:
         state.baseline_stats = job_stats()
 
     scrape_ts = state.started_at or datetime.now(timezone.utc).replace(microsecond=0).isoformat()
+    ecoevo_n = 0
     evoldir_n = 0
     sciencecareers_n = 0
+    ecoevo_ok = False
+    evoldir_ok = False
+    sciencecareers_ok = False
+    warnings: list[str] = []
 
     try:
         init_db()
+
         state.update(phase="ecoevojobs", message="Downloading ecoevojobs…")
-        with connect() as conn:
-            ecoevo_n = scrape_ecoevo(conn, state=state, scraped_at=scrape_ts)
-        with state._lock:
-            state.ecoevo_count = ecoevo_n
+        try:
+            with connect() as conn:
+                ecoevo_n = scrape_ecoevo(conn, state=state, scraped_at=scrape_ts)
+            ecoevo_ok = True
+            with state._lock:
+                state.ecoevo_count = ecoevo_n
+        except Exception as exc:
+            warnings.append(f"ecoevojobs: {exc}")
 
         if not skip_evoldir:
             from jobboards.scrape.evoldir import fetch_index, scrape_evoldir
 
-            entries = fetch_index()
-            state.update(
-                phase="evoldir",
-                evoldir_total=len(entries),
-                evoldir_done=0,
-                message=f"EvolDir 0/{len(entries)}",
-            )
-            with connect() as conn:
-                evoldir_n = scrape_evoldir(
-                    conn, state=state, scraped_at=scrape_ts, entries=entries,
+            try:
+                entries = fetch_index()
+                state.update(
+                    phase="evoldir",
+                    evoldir_total=len(entries),
+                    evoldir_done=0,
+                    message=f"EvolDir 0/{len(entries)}",
                 )
-            with state._lock:
-                state.evoldir_count = evoldir_n
+                with connect() as conn:
+                    evoldir_n = scrape_evoldir(
+                        conn, state=state, scraped_at=scrape_ts, entries=entries,
+                    )
+                evoldir_ok = True
+                with state._lock:
+                    state.evoldir_count = evoldir_n
+            except Exception as exc:
+                warnings.append(f"EvolDir: {exc}")
 
         from jobboards.scrape.sciencecareers import fetch_all_listings, scrape_sciencecareers
 
-        listings = fetch_all_listings()
-        state.update(
-            phase="sciencecareers",
-            sciencecareers_total=len(listings),
-            sciencecareers_done=0,
-            message=f"Science Careers 0/{len(listings)}",
-        )
-        with connect() as conn:
-            sciencecareers_n = scrape_sciencecareers(
-                conn, state=state, scraped_at=scrape_ts, listings=listings,
+        try:
+            listings = fetch_all_listings()
+            state.update(
+                phase="sciencecareers",
+                sciencecareers_total=len(listings),
+                sciencecareers_done=0,
+                message=f"Science Careers 0/{len(listings)}",
             )
-        with state._lock:
-            state.sciencecareers_count = sciencecareers_n
+            with connect() as conn:
+                sciencecareers_n = scrape_sciencecareers(
+                    conn, state=state, scraped_at=scrape_ts, listings=listings,
+                )
+            sciencecareers_ok = True
+            with state._lock:
+                state.sciencecareers_count = sciencecareers_n
+        except Exception as exc:
+            warnings.append(f"Science Careers: {exc}")
 
         with connect() as conn:
-            purge_stale(conn, "ecoevojobs", scrape_ts)
-            if not skip_evoldir:
+            if ecoevo_ok:
+                purge_stale(conn, "ecoevojobs", scrape_ts)
+            if evoldir_ok and not skip_evoldir:
                 purge_stale(conn, "evoldir", scrape_ts)
-            purge_stale(conn, "sciencecareers", scrape_ts)
+            if sciencecareers_ok:
+                purge_stale(conn, "sciencecareers", scrape_ts)
+
+        stats = job_stats()
+        if stats.get("total", 0) == 0:
+            detail = "; ".join(warnings) if warnings else "No jobs fetched from any source"
+            raise RuntimeError(detail)
 
         now = datetime.now(timezone.utc).replace(microsecond=0).isoformat()
-        set_meta("last_fetched_at", now)
-        stats = job_stats()
+        if ecoevo_ok or evoldir_ok or sciencecareers_ok:
+            set_meta("last_fetched_at", now)
+
+        message = "Up to date"
+        if warnings:
+            message = f"Partial update ({len(warnings)} source(s) skipped)"
+
         state.update(
             phase="done",
-            message="Up to date",
+            message=message,
             finished_at=now,
             cached_stats=stats,
+            error=None,
             ecoevo_count=ecoevo_n,
             evoldir_count=evoldir_n if not skip_evoldir else state.evoldir_count,
             sciencecareers_count=sciencecareers_n,
+            warnings=warnings,
         )
         from jobboards.subjects import clear_subject_cache
         clear_subject_cache()
@@ -200,6 +238,7 @@ def scrape_all(state: ScrapeState, skip_evoldir: bool = False) -> None:
             message=f"Error: {exc}",
             phase="error",
             finished_at=datetime.now(timezone.utc).replace(microsecond=0).isoformat(),
+            warnings=warnings,
         )
     finally:
         with state._lock:

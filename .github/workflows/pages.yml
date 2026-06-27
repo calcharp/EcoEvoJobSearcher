@@ -37,10 +37,25 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements.txt
 
+      - name: Restore jobs database cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.local/share/JobBoards/jobs.db
+          key: jobs-db-${{ github.run_number }}
+          restore-keys: |
+            jobs-db-
+
       - name: Build static site
         run: python scripts/publish_static.py --out _site
         env:
           GEOCODE_LIMIT: "400"
+
+      - name: Save jobs database cache
+        if: always()
+        uses: actions/cache/save@v4
+        with:
+          path: ~/.local/share/JobBoards/jobs.db
+          key: jobs-db-${{ github.run_number }}
 
       - name: Upload Pages artifact
         uses: actions/upload-pages-artifact@v3

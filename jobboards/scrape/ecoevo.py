@@ -5,12 +5,12 @@ from typing import Any, Iterator, Optional
 
 import requests
 
-from jobboards.config import ECOEVO_FACULTY_GID, ECOEVO_POSTDOC_GID, ECOEVO_SHEET_ID
+from jobboards.config import ECOEVO_FACULTY_GID, ECOEVO_POSTDOC_GID, ECOEVO_SHEET_ID, HTTP_HEADERS
 from jobboards.dates import parse_ecoevo_date, parse_ecoevo_datetime
 from jobboards.db import make_id, normalize_url, upsert_job
 
 SESSION = requests.Session()
-SESSION.headers.update({"User-Agent": "JobBoards/0.1 (local academic job aggregator)"})
+SESSION.headers.update(HTTP_HEADERS)
 
 
 def _export_url(gid: str) -> str:

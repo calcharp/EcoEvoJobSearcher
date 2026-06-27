@@ -47,6 +47,9 @@ def main() -> int:
         scrape=not args.no_scrape,
         geocode_limit=args.geocode_limit,
     )
+    if summary.get("scrape_warnings"):
+        for w in summary["scrape_warnings"]:
+            print(f"Warning: {w}")
     print(
         f"Done: {summary['jobs']} jobs, {summary['mapped']} on map -> {summary['out_dir']}"
     )

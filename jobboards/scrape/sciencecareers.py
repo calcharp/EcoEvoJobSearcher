@@ -9,6 +9,7 @@ from urllib.parse import urljoin
 import requests
 
 from jobboards.config import (
+    HTTP_HEADERS,
     SCIENCE_CAREERS_BASE,
     SCIENCE_CAREERS_PARALLEL_WORKERS,
 )
@@ -16,7 +17,7 @@ from jobboards.dates import parse_sciencecareers_closing
 from jobboards.db import make_id, normalize_url, upsert_job
 
 SESSION = requests.Session()
-SESSION.headers.update({"User-Agent": "JobBoards/0.1 (local academic job aggregator)"})
+SESSION.headers.update(HTTP_HEADERS)
 
 ITEM_RE = re.compile(
     r'<li class="lister__item[^"]*" id="item-(\d+)">(.*?<ul class="job-actions.*?</ul>)',

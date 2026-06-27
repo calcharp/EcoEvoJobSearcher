@@ -128,13 +128,15 @@ def publish(
     out_dir.mkdir(parents=True)
 
     init_db()
+    scrape_warnings: list[str] = []
     if scrape:
         state = ScrapeState()
         started = datetime.now(timezone.utc).replace(microsecond=0).isoformat()
         state.update(phase="starting", message="Scraping sources…", started_at=started)
         scrape_all(state)
-        if state.error:
-            raise RuntimeError(state.error)
+        scrape_warnings = list(state.warnings or [])
+        if state.phase == "error" or job_stats().get("total", 0) == 0:
+            raise RuntimeError(state.error or "Scrape failed with no jobs")
 
     if geocode_limit > 0:
         geocode_pending_loop(geocode_limit)
@@ -157,6 +159,7 @@ def publish(
         "last_fetched_at": stats.get("last_fetched_at"),
         "stats": stats,
         "map_summary": {"mapped": len(mapped), "missing": missing, "filtered_total": len(all_jobs)},
+        "scrape_warnings": scrape_warnings,
     })
     write_json(data_dir / "jobs.json", {"jobs": export_jobs, "stats": stats})
     write_json(data_dir / "map-jobs.json", {
@@ -181,4 +184,5 @@ def publish(
         "jobs": len(export_jobs),
         "mapped": len(mapped),
         "generated_at": generated_at,
+        "scrape_warnings": scrape_warnings,
     }
