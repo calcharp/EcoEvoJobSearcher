@@ -38,7 +38,9 @@ HEARTBEAT_INTERVAL_SEC = 3
 HEARTBEAT_TIMEOUT_SEC = 10
 EVOLDIR_REQUEST_DELAY_SEC = 0.0
 EVOLDIR_PARALLEL_WORKERS = int(os.environ.get("EVOLDIR_PARALLEL_WORKERS", "8" if os.environ.get("GITHUB_ACTIONS") else "3"))
-SCIENCE_CAREERS_PARALLEL_WORKERS = int(os.environ.get("SCIENCE_CAREERS_PARALLEL_WORKERS", "3"))
+SCIENCE_CAREERS_PARALLEL_WORKERS = int(
+    os.environ.get("SCIENCE_CAREERS_PARALLEL_WORKERS", "8" if os.environ.get("GITHUB_ACTIONS") else "3")
+)
 
 
 def is_github_actions() -> bool:
@@ -50,8 +52,7 @@ def http_timeout() -> float:
 
 
 def science_careers_fetch_details() -> bool:
-    default = "0" if is_github_actions() else "1"
-    return os.environ.get("SCIENCE_CAREERS_FETCH_DETAILS", default) == "1"
+    return os.environ.get("SCIENCE_CAREERS_FETCH_DETAILS", "1") == "1"
 
 
 def ci_skip_geocode() -> bool:
