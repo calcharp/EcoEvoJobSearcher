@@ -173,10 +173,12 @@ def _build_job(
     path = listing["path"]
     url = urljoin(SCIENCE_CAREERS_BASE, path)
     job_id = listing["job_id"]
-    institution = listing["institution"] or None
-    title = listing["title"] or institution or "Science Careers listing"
-    snippet = listing["snippet"]
-    subject = detail.get("subject_area") or snippet or title
+    institution = _listing_institution(listing)
+    title = listing.get("title") or institution or "Science Careers listing"
+    snippet = listing.get("snippet")
+    subject = detail.get("subject_area") or title
+    if subject == snippet and title:
+        subject = title
 
     notes_parts = []
     if listing.get("salary"):
@@ -215,12 +217,42 @@ def _build_job(
     }
 
 
+def _institution_from_snippet(snippet: Optional[str]) -> Optional[str]:
+    if not snippet:
+        return None
+    patterns = (
+        r"^((?:The\s+)?[A-Z][^.]{3,100}?)\s+(?:is currently seeking|invites applications|is seeking|seeks)",
+        r"^([^.]{5,100}?)\s+is\s+(?:currently\s+)?seeking",
+    )
+    for pattern in patterns:
+        m = re.match(pattern, snippet.strip(), re.I)
+        if m:
+            name = _clean(m.group(1))
+            if name and "@" not in name and len(name) < 100:
+                return name
+    return None
+
+
+def _listing_institution(listing: dict[str, str]) -> Optional[str]:
+    inst = (listing.get("institution") or "").strip()
+    title = (listing.get("title") or "").strip()
+    snippet = listing.get("snippet")
+    if inst and "@" not in inst:
+        return inst
+    from_snippet = _institution_from_snippet(snippet)
+    if from_snippet:
+        return from_snippet
+    if title and len(title) < 100 and not title.endswith("."):
+        return title
+    return inst or None
+
+
 def _listing_only_detail(listing: dict[str, str]) -> dict[str, Any]:
     return {
         "posted_at": None,
         "apply_by": None,
         "description_raw": listing.get("snippet"),
-        "subject_area": listing.get("snippet") or listing.get("title"),
+        "subject_area": listing.get("title"),
         "position_type": None,
         "fetch_status": "listing_only",
     }

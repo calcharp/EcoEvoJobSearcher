@@ -1488,6 +1488,13 @@ a.active-filter-clear:hover {
 
 .external-link { margin-bottom: 1.5rem; }
 
+.detail-hint {
+  margin: 0 0 1rem;
+  font-size: 0.85rem;
+  color: var(--text-muted);
+  line-height: 1.45;
+}
+
 .detail-section {
   margin-top: 1.75rem;
   padding-top: 1.5rem;

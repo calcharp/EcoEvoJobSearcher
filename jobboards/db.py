@@ -144,7 +144,8 @@ LIST_JOB_COLUMNS = (
     "id", "source", "source_tab", "source_slug", "institution", "location",
     "subject_area", "rank_or_pi", "position_type", "title", "url", "url_normalized",
     "contact_email", "posted_at", "apply_by", "updated_at", "start_date",
-    "notes_thread_json", "number_applied", "post_size",
+    "notes_raw", "notes_thread_json", "description_raw",
+    "number_applied", "post_size",
     "is_multi_job", "parent_post_id", "fetch_status", "scraped_at",
 )
 
