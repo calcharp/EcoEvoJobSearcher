@@ -4,6 +4,7 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime, timezone
 from html import unescape
 from typing import Any, Optional
+from pathlib import Path
 from urllib.parse import urljoin
 
 import requests
@@ -12,14 +13,17 @@ from jobboards.config import (
     HTTP_HEADERS,
     SCIENCE_CAREERS_BASE,
     SCIENCE_CAREERS_PARALLEL_WORKERS,
-    http_timeout,
     science_careers_fetch_details,
 )
 from jobboards.dates import parse_sciencecareers_closing
 from jobboards.db import make_id, normalize_url, upsert_job
+from jobboards.http_client import fetch_text
 
 SESSION = requests.Session()
 SESSION.headers.update(HTTP_HEADERS)
+
+ROOT = Path(__file__).resolve().parent.parent.parent
+SCIENCE_CAREERS_SEED = ROOT / "data" / "sciencecareers-seed.json"
 
 ITEM_RE = re.compile(
     r'<li class="lister__item[^"]*" id="item-(\d+)">(.*?<ul class="job-actions.*?</ul>)',
@@ -63,9 +67,12 @@ def _listing_url(page: int) -> str:
 
 
 def fetch_listing_page(page: int) -> str:
-    resp = SESSION.get(_listing_url(page), timeout=http_timeout())
-    resp.raise_for_status()
-    return resp.text
+    url = _listing_url(page)
+    return fetch_text(
+        url,
+        session=SESSION,
+        referer=SCIENCE_CAREERS_BASE + "/",
+    )
 
 
 def parse_listing_page(html: str) -> list[dict[str, str]]:
@@ -133,9 +140,11 @@ def _parse_json_ld(html: str) -> Optional[dict[str, Any]]:
 
 def fetch_job_detail(path: str) -> dict[str, Any]:
     url = urljoin(SCIENCE_CAREERS_BASE, path)
-    resp = SESSION.get(url, timeout=http_timeout())
-    resp.raise_for_status()
-    html = resp.text
+    html = fetch_text(
+        url,
+        session=SESSION,
+        referer=f"{SCIENCE_CAREERS_BASE}/jobs/",
+    )
     ld = _parse_json_ld(html) or {}
     meta = _parse_meta(html)
     closing_m = CLOSING_RE.search(html)
@@ -321,3 +330,16 @@ def scrape_sciencecareers(
                 )
     conn.commit()
     return count
+
+
+def import_sciencecareers_seed(conn, scraped_at: str) -> int:
+    if not SCIENCE_CAREERS_SEED.is_file():
+        return 0
+    payload = json.loads(SCIENCE_CAREERS_SEED.read_text(encoding="utf-8"))
+    jobs = payload if isinstance(payload, list) else payload.get("jobs", [])
+    for job in jobs:
+        row = dict(job)
+        row["scraped_at"] = scraped_at
+        upsert_job(conn, row)
+    conn.commit()
+    return len(jobs)

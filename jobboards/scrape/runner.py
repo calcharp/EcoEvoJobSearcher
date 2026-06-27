@@ -195,6 +195,21 @@ def scrape_all(
                 state.sciencecareers_count = sciencecareers_n
         except Exception as exc:
             warnings.append(f"Science Careers: {exc}")
+            try:
+                from jobboards.scrape.sciencecareers import import_sciencecareers_seed
+
+                with connect() as conn:
+                    imported = import_sciencecareers_seed(conn, scrape_ts)
+                if imported:
+                    sciencecareers_ok = True
+                    sciencecareers_n = imported
+                    with state._lock:
+                        state.sciencecareers_count = imported
+                    warnings.append(
+                        f"Science Careers: live scrape blocked; loaded {imported} listings from seed"
+                    )
+            except Exception as seed_exc:
+                warnings.append(f"Science Careers seed: {seed_exc}")
 
         with connect() as conn:
             if ecoevo_ok:
