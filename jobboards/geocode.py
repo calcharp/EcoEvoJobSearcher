@@ -41,6 +41,33 @@ AU_STATES = {
     "northern territory",
 }
 
+US_STATE_ABBREV = {
+    "AL": "Alabama", "AK": "Alaska", "AZ": "Arizona", "AR": "Arkansas",
+    "CA": "California", "CO": "Colorado", "CT": "Connecticut", "DE": "Delaware",
+    "DC": "District of Columbia", "FL": "Florida", "GA": "Georgia", "HI": "Hawaii",
+    "ID": "Idaho", "IL": "Illinois", "IN": "Indiana", "IA": "Iowa", "KS": "Kansas",
+    "KY": "Kentucky", "LA": "Louisiana", "ME": "Maine", "MD": "Maryland",
+    "MA": "Massachusetts", "MI": "Michigan", "MN": "Minnesota", "MS": "Mississippi",
+    "MO": "Missouri", "MT": "Montana", "NE": "Nebraska", "NV": "Nevada",
+    "NH": "New Hampshire", "NJ": "New Jersey", "NM": "New Mexico", "NY": "New York",
+    "NC": "North Carolina", "ND": "North Dakota", "OH": "Ohio", "OK": "Oklahoma",
+    "OR": "Oregon", "PA": "Pennsylvania", "RI": "Rhode Island", "SC": "South Carolina",
+    "SD": "South Dakota", "TN": "Tennessee", "TX": "Texas", "UT": "Utah",
+    "VT": "Vermont", "VA": "Virginia", "WA": "Washington", "WV": "West Virginia",
+    "WI": "Wisconsin", "WY": "Wyoming",
+}
+
+PAREN_COUNTRY = {
+    "US": "USA", "USA": "USA", "UK": "UK", "GB": "UK", "CA": "Canada",
+    "CN": "China", "CH": "Switzerland", "DE": "Germany", "FR": "France",
+    "AT": "Austria", "JP": "Japan", "HK": "Hong Kong", "SG": "Singapore",
+    "MO": "Macau", "KR": "South Korea", "AU": "Australia", "NL": "Netherlands",
+    "BE": "Belgium", "DK": "Denmark", "SE": "Sweden", "NO": "Norway",
+    "FI": "Finland", "ES": "Spain", "IT": "Italy", "PT": "Portugal",
+    "IE": "Ireland", "PL": "Poland", "TW": "Taiwan", "IN": "India",
+    "BR": "Brazil", "MX": "Mexico", "IL": "Israel", "NZ": "New Zealand",
+}
+
 CAMPUS_TYPES = {
     "university", "college", "museum", "research_institute", "school",
     "hospital", "library", "zoo", "aquarium",
@@ -73,9 +100,131 @@ def place_key(institution: str, location: Optional[str]) -> str:
     return make_id("geo", inst, loc)
 
 
+def normalize_location(location: Optional[str]) -> str:
+    if not location:
+        return ""
+    loc = re.sub(r"\s+", " ", location.strip())
+
+    paren = re.match(r"^(.+?)\s*\(([A-Za-z]{2,3})\)\s*$", loc)
+    paren_country = None
+    if paren:
+        loc = paren.group(1).strip()
+        paren_country = PAREN_COUNTRY.get(paren.group(2).upper())
+
+    abbrev = re.match(r"^(.+),\s*([A-Z]{2})\s*$", loc)
+    if abbrev:
+        city = abbrev.group(1).strip()
+        state = US_STATE_ABBREV.get(abbrev.group(2))
+        if state:
+            return f"{city}, {state}, USA"
+
+    if "," in loc:
+        parts = [p.strip() for p in loc.split(",")]
+        if len(parts) >= 2 and parts[-1].lower() in US_STATES:
+            return f"{', '.join(parts)}, USA"
+
+    loc_lower = loc.lower()
+    if loc_lower in US_STATES or loc_lower == "district of columbia":
+        region = "Washington, DC, USA" if loc_lower == "district of columbia" else f"{loc}, USA"
+        return region
+
+    if loc_lower in CANADIAN_PROVINCES:
+        return f"{loc}, Canada"
+
+    if loc_lower in AU_STATES:
+        return f"{loc}, Australia"
+
+    if re.search(r"(?:shire|england|scotland|wales)\b", loc, re.I):
+        if "united kingdom" not in loc_lower and loc_lower != "uk":
+            return f"{loc}, UK"
+
+    if paren_country:
+        return f"{loc}, {paren_country}" if loc else paren_country
+
+    return loc
+
+
+def _institution_geo_candidates(institution: str) -> list[str]:
+    inst = re.sub(r"\s+", " ", (institution or "").strip())
+    if not inst:
+        return []
+
+    candidates: list[str] = []
+    seen: set[str] = set()
+
+    def add(value: str) -> None:
+        value = re.sub(r"\s+", " ", value.strip())
+        key = value.lower()
+        if value and key not in seen:
+            seen.add(key)
+            candidates.append(value)
+
+    add(inst)
+
+    m = re.match(r"^Department of [^,]+,\s*(.+)$", inst, re.I)
+    if m:
+        add(m.group(1))
+
+    m = re.match(r"^([^,]+),\s*(?:Department|Dept\.?|School) of .+$", inst, re.I)
+    if m:
+        add(m.group(1))
+
+    m = re.match(r"^(University of [^,/]+)", inst, re.I)
+    if m:
+        add(m.group(1))
+
+    m = re.match(r"^(University of [^,]+?)(?:\s+Department\b.*)?$", inst, re.I)
+    if m:
+        add(m.group(1))
+
+    m = re.match(r"^([^,]*University[^,]*)", inst, re.I)
+    if m:
+        add(m.group(1))
+
+    m = re.match(r"^(.+?)\s+School of Medicine$", inst, re.I)
+    if m:
+        add(m.group(1))
+
+    m = re.match(r"^(.+?)\s+Health Sciences Center\b.*$", inst, re.I)
+    if m:
+        add(m.group(1))
+
+    return candidates
+
+
+def _geocode_queries(institution: str, location: Optional[str]) -> list[str]:
+    norm_loc = normalize_location(location)
+    raw_loc = re.sub(r"\s+", " ", (location or "").strip())
+    queries: list[str] = []
+    seen: set[str] = set()
+
+    def add(query: str) -> None:
+        query = re.sub(r"\s+", " ", query.strip())
+        key = query.lower()
+        if query and key not in seen:
+            seen.add(key)
+            queries.append(query)
+
+    for inst in _institution_geo_candidates(institution):
+        if norm_loc:
+            add(build_geo_query(inst, norm_loc))
+        if raw_loc and raw_loc != norm_loc:
+            add(build_geo_query(inst, raw_loc))
+
+    if norm_loc:
+        add(norm_loc)
+    elif raw_loc:
+        add(raw_loc)
+
+    if not institution and raw_loc:
+        add(build_geo_query("", raw_loc))
+
+    return queries
+
+
 def build_geo_query(institution: str, location: Optional[str]) -> str:
     inst = re.sub(r"\s+", " ", (institution or "").strip())
-    loc = re.sub(r"\s+", " ", (location or "").strip())
+    loc = normalize_location(location)
     loc_lower = loc.lower()
 
     if not inst:
@@ -273,15 +422,106 @@ def save_geo_cache(
         )
 
 
+def _cached_location_fallback(location: Optional[str]) -> Optional[tuple[str, dict[str, Any]]]:
+    norm = normalize_location(location)
+    if not norm:
+        return None
+    with connect() as conn:
+        rows = conn.execute(
+            """
+            SELECT location, query, lat, lon, precision, display_name
+            FROM geo_cache
+            WHERE lat IS NOT NULL
+            """
+        ).fetchall()
+    best = None
+    best_score = 99
+    for row in rows:
+        if normalize_location(row["location"]) != norm:
+            continue
+        score = {"campus": 0, "city": 1, "region": 2, "country": 3}.get(
+            row["precision"] or "", 4
+        )
+        if score < best_score:
+            best_score = score
+            best = row
+    if not best:
+        return None
+    return best["query"], {
+        "lat": best["lat"],
+        "lon": best["lon"],
+        "precision": best["precision"] or "city",
+        "display_name": best["display_name"] or norm,
+    }
+
+
 def geocode_place(institution: str, location: Optional[str]) -> dict[str, Any]:
     key = place_key(institution, location)
-    query = build_geo_query(institution, location)
-    result = geocode_query(query)
-    if result:
+    queries = _geocode_queries(institution, location)
+    for query in queries:
+        result = geocode_query(query)
+        if result:
+            save_geo_cache(key, institution, location, query, result)
+            return {"place_key": key, "ok": True, **result}
+    cached = _cached_location_fallback(location)
+    if cached:
+        query, result = cached
         save_geo_cache(key, institution, location, query, result)
         return {"place_key": key, "ok": True, **result}
-    save_geo_cache(key, institution, location, query, None, error="not found")
+    fallback = queries[0] if queries else build_geo_query(institution, location)
+    save_geo_cache(key, institution, location, fallback, None, error="not found")
     return {"place_key": key, "ok": False}
+
+
+def repair_geo_cache_location_fallbacks() -> int:
+    """Fill failed geo_cache rows from successful rows with the same normalized location."""
+    with connect() as conn:
+        rows = conn.execute(
+            """
+            SELECT place_key, institution, location, lat, query, lon, precision, display_name
+            FROM geo_cache
+            """
+        ).fetchall()
+
+    success_by_norm: dict[str, dict[str, Any]] = {}
+    for row in rows:
+        if row["lat"] is None:
+            continue
+        norm = normalize_location(row["location"])
+        if not norm:
+            continue
+        score = {"campus": 0, "city": 1, "region": 2, "country": 3}.get(
+            row["precision"] or "", 4
+        )
+        prev = success_by_norm.get(norm)
+        if prev is None or score < prev["_score"]:
+            success_by_norm[norm] = {**dict(row), "_score": score}
+
+    if not success_by_norm:
+        return 0
+
+    fixed = 0
+    for row in rows:
+        if row["lat"] is not None:
+            continue
+        norm = normalize_location(row["location"])
+        src = success_by_norm.get(norm or "")
+        if not src:
+            continue
+        save_geo_cache(
+            row["place_key"],
+            row["institution"],
+            row["location"],
+            src["query"],
+            {
+                "lat": src["lat"],
+                "lon": src["lon"],
+                "precision": src["precision"] or "city",
+                "display_name": src["display_name"] or norm,
+            },
+        )
+        fixed += 1
+    return fixed
 
 
 def get_pending_places(limit: int = 100) -> list[tuple[str, str, str]]:

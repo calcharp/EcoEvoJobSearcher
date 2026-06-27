@@ -15,6 +15,8 @@ from jobboards.db import init_db, job_stats  # noqa: E402
 from jobboards.geocode import (  # noqa: E402
     export_geo_cache,
     geo_stats,
+    import_geo_cache,
+    repair_geo_cache_location_fallbacks,
     run_geocode_all,
     run_geocode_retry_all,
 )
@@ -43,6 +45,11 @@ def main() -> int:
         help="Scrape job sources before geocoding (uses your local jobs.db)",
     )
     parser.add_argument(
+        "--repair-fallbacks",
+        action="store_true",
+        help="Copy coordinates from mapped places that share the same normalized location",
+    )
+    parser.add_argument(
         "--retry-failed",
         action="store_true",
         help="Retry places that failed geocoding on a previous run",
@@ -67,10 +74,21 @@ def main() -> int:
     )
     args = parser.parse_args()
 
-    export_path = args.export or (str(DEFAULT_EXPORT) if args.export_only else None)
-    run_geocode = not args.export_only
+    export_path = args.export or (
+        str(DEFAULT_EXPORT) if args.export_only or args.repair_fallbacks else None
+    )
+    run_geocode = not args.export_only and not args.repair_fallbacks
 
     init_db()
+
+    if args.repair_fallbacks and not Path(DEFAULT_EXPORT).is_file():
+        print(f"Missing seed file: {DEFAULT_EXPORT}", file=sys.stderr)
+        return 1
+
+    if args.repair_fallbacks:
+        imported = import_geo_cache(DEFAULT_EXPORT)
+        if imported:
+            print(f"Loaded {imported} geo cache entries from {DEFAULT_EXPORT}")
 
     if args.scrape:
         print("Scraping sources…")
@@ -109,11 +127,17 @@ def main() -> int:
 
         _print_stats("After")
 
+    if args.repair_fallbacks:
+        fixed = repair_geo_cache_location_fallbacks()
+        if fixed:
+            print(f"Repaired {fixed} place(s) via location fallback")
+        _print_stats("After repair")
+
     if export_path:
         out = Path(export_path)
         count = export_geo_cache(out)
         print(f"Exported {count} entries -> {out}")
-        if run_geocode:
+        if run_geocode or args.repair_fallbacks:
             print("Commit data/geo-cache.json so GitHub Actions can skip bulk geocoding.")
 
     return 0
