@@ -300,6 +300,21 @@
     notify();
   }
 
+  /** Ensure open + recent are on (does not remove other filters). Returns true if stack changed. */
+  function ensureOpenAndRecent() {
+    let changed = false;
+    if (!isOpenFilterActive()) {
+      stack.push({ id: makeId(), type: "open", label: "Open applications" });
+      changed = true;
+    }
+    if (!isRecentFilterActive()) {
+      stack.push({ id: makeId(), type: "recent", label: "New since yesterday" });
+      changed = true;
+    }
+    if (changed) notify();
+    return changed;
+  }
+
   function buildApiParams(source, sort, order) {
     const params = stackToParams(stack);
     params.set("source", source);
@@ -343,6 +358,7 @@
     toggleOpenFilter,
     isRecentFilterActive,
     toggleRecentFilter,
+    ensureOpenAndRecent,
     buildApiParams,
     buildIndexQuery,
     indexUrlAddingKeyword,

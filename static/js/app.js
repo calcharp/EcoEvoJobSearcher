@@ -506,6 +506,7 @@
       recentToggle.classList.toggle("is-active", active);
       recentToggle.setAttribute("aria-pressed", active ? "true" : "false");
     }
+    syncSortNewButton();
     if (window.JobBoardsFilters) {
       window.history.replaceState(null, "", JobBoardsFilters.toUrl());
     }
@@ -609,8 +610,44 @@
       if (!window.JobBoardsFilters) return;
       JobBoardsFilters.toggleRecentFilter();
     });
+    document.getElementById("sort-new-btn")?.addEventListener("click", () => {
+      applySortNewPreset();
+    });
     wireJobsListMapEvents();
     restoreMapAreaFromFilters();
+  }
+
+  function isSortNewPresetActive() {
+    if (!window.JobBoardsFilters) return false;
+    const sort = document.getElementById("sort-filter")?.value;
+    const order = document.getElementById("order-filter")?.value;
+    return (
+      JobBoardsFilters.isOpenFilterActive() &&
+      JobBoardsFilters.isRecentFilterActive() &&
+      sort === "posted_at" &&
+      order === "desc"
+    );
+  }
+
+  function syncSortNewButton() {
+    const btn = document.getElementById("sort-new-btn");
+    if (!btn) return;
+    btn.classList.toggle("is-active", isSortNewPresetActive());
+  }
+
+  function applySortNewPreset() {
+    if (!window.JobBoardsFilters) return;
+    const sortEl = document.getElementById("sort-filter");
+    const orderEl = document.getElementById("order-filter");
+    if (sortEl) sortEl.value = "posted_at";
+    if (orderEl) orderEl.value = "desc";
+    const filtersChanged = JobBoardsFilters.ensureOpenAndRecent();
+    if (!filtersChanged) {
+      JobBoardsFilters.saveSession();
+      syncFilterUrl();
+      syncSortNewButton();
+      scheduleReloadResults({ resetFit: true });
+    }
   }
 
   function csvEscape(value) {
@@ -668,6 +705,7 @@
     document.getElementById(id)?.addEventListener("change", () => {
       if (window.JobBoardsFilters) JobBoardsFilters.saveSession();
       syncFilterUrl();
+      syncSortNewButton();
       scheduleReloadResults({ resetFit: true });
     });
   });
