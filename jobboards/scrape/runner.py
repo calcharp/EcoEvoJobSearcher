@@ -176,7 +176,29 @@ def scrape_all(
             except Exception as exc:
                 warnings.append(f"EvolDir: {exc}")
 
-        from jobboards.scrape.sciencecareers import fetch_all_listings, scrape_sciencecareers
+        from jobboards.scrape.sciencecareers import (
+            SCIENCE_CAREERS_SEED,
+            fetch_all_listings,
+            import_sciencecareers_seed,
+            scrape_sciencecareers,
+        )
+
+        def _restore_sciencecareers_from_seed(reason: str) -> None:
+            nonlocal sciencecareers_n, sciencecareers_ok
+            with connect() as conn:
+                # Drop the incomplete live shells so purge cannot keep them.
+                conn.execute("DELETE FROM jobs WHERE source = 'sciencecareers'")
+                imported = import_sciencecareers_seed(conn, scrape_ts)
+            if imported:
+                sciencecareers_ok = True
+                sciencecareers_n = imported
+                with state._lock:
+                    state.sciencecareers_count = imported
+                warnings.append(
+                    f"Science Careers: {reason}; loaded {imported} listings from seed"
+                )
+            else:
+                warnings.append(f"Science Careers: {reason}; seed unavailable")
 
         try:
             listings = fetch_all_listings()
@@ -196,51 +218,20 @@ def scrape_all(
         except Exception as exc:
             warnings.append(f"Science Careers: {exc}")
             try:
-                from jobboards.scrape.sciencecareers import (
-                    SCIENCE_CAREERS_SEED,
-                    import_sciencecareers_seed,
-                )
-
-                with connect() as conn:
-                    existing = conn.execute(
-                        "SELECT COUNT(*) AS n, MAX(scraped_at) AS newest "
-                        "FROM jobs WHERE source = 'sciencecareers'"
-                    ).fetchone()
-                    seed_newest = ""
-                    if SCIENCE_CAREERS_SEED.is_file():
-                        import json
-
-                        payload = json.loads(
-                            SCIENCE_CAREERS_SEED.read_text(encoding="utf-8")
-                        )
-                        seed_jobs = (
-                            payload if isinstance(payload, list) else payload.get("jobs", [])
-                        )
-                        seed_newest = max(
-                            (j.get("scraped_at") or "" for j in seed_jobs),
-                            default="",
-                        )
-                    db_newest = existing["newest"] or ""
-                    use_seed = bool(seed_newest) and (
-                        not existing["n"] or seed_newest > db_newest
-                    )
-                    if use_seed:
-                        imported = import_sciencecareers_seed(conn, scrape_ts)
-                        if imported:
-                            sciencecareers_ok = True
-                            sciencecareers_n = imported
-                            with state._lock:
-                                state.sciencecareers_count = imported
-                            warnings.append(
-                                f"Science Careers: live scrape blocked; loaded {imported} listings from seed"
-                            )
-                    elif existing["n"]:
+                if SCIENCE_CAREERS_SEED.is_file():
+                    _restore_sciencecareers_from_seed("live scrape failed")
+                else:
+                    with connect() as conn:
+                        existing = conn.execute(
+                            "SELECT COUNT(*) AS n FROM jobs WHERE source = 'sciencecareers'"
+                        ).fetchone()["n"]
+                    if existing:
                         warnings.append(
-                            f"Science Careers: live scrape blocked; keeping {existing['n']} cached listings"
+                            f"Science Careers: live scrape failed; keeping {existing} cached listings"
                         )
-                        sciencecareers_n = existing["n"]
+                        sciencecareers_n = existing
                         with state._lock:
-                            state.sciencecareers_count = existing["n"]
+                            state.sciencecareers_count = existing
             except Exception as seed_exc:
                 warnings.append(f"Science Careers seed: {seed_exc}")
 

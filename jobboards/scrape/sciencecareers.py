@@ -296,6 +296,7 @@ def scrape_sciencecareers(
         )
 
     count = 0
+    detail_ok = 0
     if not science_careers_fetch_details():
         for done, listing in enumerate(listings, start=1):
             job = _build_job(listing, _listing_only_detail(listing), scraped_at)
@@ -322,6 +323,8 @@ def scrape_sciencecareers(
             upsert_job(conn, job)
             count += 1
             done += 1
+            if job.get("fetch_status") == "ok" and job.get("posted_at"):
+                detail_ok += 1
             if done % 25 == 0:
                 conn.commit()
             if state:
@@ -331,6 +334,12 @@ def scrape_sciencecareers(
                     message=f"Science Careers {done}/{total}",
                 )
     conn.commit()
+    # Listing pages can succeed while CloudFront blocks every detail URL.
+    # Those shells lack posted_at and would wipe a good seed if we kept them.
+    if count and detail_ok / count < 0.5:
+        raise RuntimeError(
+            f"Science Careers detail scrape too incomplete ({detail_ok}/{count} with dates)"
+        )
     return count
 
 
