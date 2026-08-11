@@ -2,9 +2,9 @@ import os
 import sys
 from pathlib import Path
 
-ECOEVO_SHEET_ID = "1P7BfU0emdcGFVIWIs_erFxyy0UGXXORw7h0rpU19gQ8"
-ECOEVO_FACULTY_GID = "1219796980"
-ECOEVO_POSTDOC_GID = "1228591705"
+ECOEVO_SHEET_ID = "1frP2LlZy_GibdpXxg_WDoHGjVAZk_8tb-GsPN_Thkms"
+ECOEVO_FACULTY_GID = "332523242"
+ECOEVO_POSTDOC_GID = "900481761"
 
 EVOLDIR_INDEX = "https://www.evoldir.net/brian/Jobs.html"
 EVOLDIR_DETAIL_BASE = "https://www.evoldir.net/brian/evoldir/Jobs//"

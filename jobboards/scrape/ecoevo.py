@@ -14,9 +14,10 @@ SESSION.headers.update(HTTP_HEADERS)
 
 
 def _export_url(gid: str) -> str:
+    # /export?format=csv started returning 400 from Google; gviz CSV still works.
     return (
         f"https://docs.google.com/spreadsheets/d/{ECOEVO_SHEET_ID}"
-        f"/export?format=csv&gid={gid}"
+        f"/gviz/tq?tqx=out:csv&gid={gid}"
     )
 
 
@@ -24,10 +25,9 @@ def iter_tab_jobs(gid: str, tab_name: str, scraped_at: str) -> Iterator[dict[str
     resp = SESSION.get(_export_url(gid), timeout=max(http_timeout(), 30))
     resp.raise_for_status()
     reader = csv.reader(io.StringIO(resp.text))
-    next(reader, None)
-    next(reader, None)
+    next(reader, None)  # header row
 
-    for sheet_row, row in enumerate(reader, start=3):
+    for sheet_row, row in enumerate(reader, start=2):
         if not row or not row[0].strip():
             continue
         if not parse_ecoevo_datetime(row[0]):
@@ -48,7 +48,8 @@ def _parse_faculty_row(row: list[str], scraped_at: str, sheet_row: int) -> Optio
     while len(row) < 12:
         row.append("")
     ts, institution, location, subject, review_date, url, rank, pos_type, last_up, notes = row[:10]
-    number_applied = row[10] if len(row) > 10 else ""
+    # 2026-27 sheet inserted Annual Salary before Number Applied.
+    number_applied = row[11] if len(row) > 11 else (row[10] if len(row) > 10 else "")
 
     posted = parse_ecoevo_datetime(ts)
     if not institution.strip():
