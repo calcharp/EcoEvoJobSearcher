@@ -196,18 +196,51 @@ def scrape_all(
         except Exception as exc:
             warnings.append(f"Science Careers: {exc}")
             try:
-                from jobboards.scrape.sciencecareers import import_sciencecareers_seed
+                from jobboards.scrape.sciencecareers import (
+                    SCIENCE_CAREERS_SEED,
+                    import_sciencecareers_seed,
+                )
 
                 with connect() as conn:
-                    imported = import_sciencecareers_seed(conn, scrape_ts)
-                if imported:
-                    sciencecareers_ok = True
-                    sciencecareers_n = imported
-                    with state._lock:
-                        state.sciencecareers_count = imported
-                    warnings.append(
-                        f"Science Careers: live scrape blocked; loaded {imported} listings from seed"
+                    existing = conn.execute(
+                        "SELECT COUNT(*) AS n, MAX(scraped_at) AS newest "
+                        "FROM jobs WHERE source = 'sciencecareers'"
+                    ).fetchone()
+                    seed_newest = ""
+                    if SCIENCE_CAREERS_SEED.is_file():
+                        import json
+
+                        payload = json.loads(
+                            SCIENCE_CAREERS_SEED.read_text(encoding="utf-8")
+                        )
+                        seed_jobs = (
+                            payload if isinstance(payload, list) else payload.get("jobs", [])
+                        )
+                        seed_newest = max(
+                            (j.get("scraped_at") or "" for j in seed_jobs),
+                            default="",
+                        )
+                    db_newest = existing["newest"] or ""
+                    use_seed = bool(seed_newest) and (
+                        not existing["n"] or seed_newest > db_newest
                     )
+                    if use_seed:
+                        imported = import_sciencecareers_seed(conn, scrape_ts)
+                        if imported:
+                            sciencecareers_ok = True
+                            sciencecareers_n = imported
+                            with state._lock:
+                                state.sciencecareers_count = imported
+                            warnings.append(
+                                f"Science Careers: live scrape blocked; loaded {imported} listings from seed"
+                            )
+                    elif existing["n"]:
+                        warnings.append(
+                            f"Science Careers: live scrape blocked; keeping {existing['n']} cached listings"
+                        )
+                        sciencecareers_n = existing["n"]
+                        with state._lock:
+                            state.sciencecareers_count = existing["n"]
             except Exception as seed_exc:
                 warnings.append(f"Science Careers seed: {seed_exc}")
 

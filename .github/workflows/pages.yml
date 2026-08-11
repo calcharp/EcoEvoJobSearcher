@@ -48,6 +48,9 @@ jobs:
             jobs-db-
 
       - name: Build static site
+        env:
+          # Optional residential/datacenter proxy — Science Careers blocks many GitHub Actions IPs.
+          SCIENCE_CAREERS_PROXY: ${{ secrets.SCIENCE_CAREERS_PROXY }}
         run: python scripts/publish_static.py --out _site
 
       - name: Save jobs database cache

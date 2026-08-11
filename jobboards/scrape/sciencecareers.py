@@ -71,7 +71,8 @@ def fetch_listing_page(page: int) -> str:
     return fetch_text(
         url,
         session=SESSION,
-        referer=SCIENCE_CAREERS_BASE + "/",
+        referer=SCIENCE_CAREERS_BASE + "/" if page > 1 else None,
+        warmup_origin=SCIENCE_CAREERS_BASE,
     )
 
 
@@ -144,6 +145,7 @@ def fetch_job_detail(path: str) -> dict[str, Any]:
         url,
         session=SESSION,
         referer=f"{SCIENCE_CAREERS_BASE}/jobs/",
+        warmup_origin=SCIENCE_CAREERS_BASE,
     )
     ld = _parse_json_ld(html) or {}
     meta = _parse_meta(html)
@@ -342,4 +344,25 @@ def import_sciencecareers_seed(conn, scraped_at: str) -> int:
         row["scraped_at"] = scraped_at
         upsert_job(conn, row)
     conn.commit()
+    return len(jobs)
+
+
+def export_sciencecareers_seed(conn, out_path: Optional[Path] = None) -> int:
+    """Write current Science Careers rows to the committed seed file."""
+    path = out_path or SCIENCE_CAREERS_SEED
+    cols = [
+        "id", "source", "source_tab", "source_slug", "institution", "location",
+        "subject_area", "rank_or_pi", "position_type", "title", "url", "url_normalized",
+        "urls_json", "contact_email", "posted_at", "apply_by", "updated_at", "start_date",
+        "notes_raw", "notes_thread_json", "description_raw", "number_applied", "post_size",
+        "is_multi_job", "parent_post_id", "fetch_status", "scraped_at",
+    ]
+    col_sql = ", ".join(cols)
+    rows = conn.execute(
+        f"SELECT {col_sql} FROM jobs WHERE source = 'sciencecareers' "
+        "ORDER BY posted_at DESC, id"
+    ).fetchall()
+    jobs = [{c: row[c] for c in cols} for row in rows]
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(jobs, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
     return len(jobs)
