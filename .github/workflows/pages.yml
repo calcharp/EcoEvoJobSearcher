@@ -15,7 +15,8 @@ permissions:
 
 concurrency:
   group: pages
-  cancel-in-progress: false
+  # Cancel queued/in-progress deploys so a stuck environment wait cannot block days of updates.
+  cancel-in-progress: true
 
 jobs:
   deploy:
