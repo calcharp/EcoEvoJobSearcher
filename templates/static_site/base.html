@@ -16,7 +16,7 @@
       } catch (_) {}
     })();
   </script>
-  <link rel="stylesheet" href="{{ base_path }}static/css/style.css?v=week2">
+  <link rel="stylesheet" href="{{ base_path }}static/css/style.css?v=week3">
   {% block head %}{% endblock %}
 </head>
 <body class="{% block body_class %}{% endblock %}">
@@ -35,15 +35,15 @@
             </div>
             <div class="stat-card">
               <span class="stat-value" id="stat-ecoevo">{{ stats.ecoevojobs }}</span>
-              <span class="stat-label">ecoevojobs</span>
+              <a class="stat-label stat-source-link" href="{{ source_urls.ecoevojobs }}" target="_blank" rel="noopener noreferrer" title="Open the current ecoevojobs spreadsheet">ecoevojobs</a>
             </div>
             <div class="stat-card">
               <span class="stat-value" id="stat-evoldir">{{ stats.evoldir }}</span>
-              <span class="stat-label">EvolDir</span>
+              <a class="stat-label stat-source-link" href="{{ source_urls.evoldir }}" target="_blank" rel="noopener noreferrer" title="Open EvolDir jobs">EvolDir</a>
             </div>
             <div class="stat-card">
               <span class="stat-value" id="stat-sciencecareers">{{ stats.sciencecareers }}</span>
-              <span class="stat-label">Sci Careers</span>
+              <a class="stat-label stat-source-link" href="{{ source_urls.sciencecareers }}" target="_blank" rel="noopener noreferrer" title="Open Science Careers jobs">Sci Careers</a>
             </div>
             <div class="stat-card">
               <span class="stat-value" id="stat-deadlines">{{ stats.with_deadline }}</span>

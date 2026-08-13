@@ -121,12 +121,23 @@ def copy_static_assets(out_dir: Path) -> None:
 def render_site_pages(out_dir: Path, base_path: str, stats: dict[str, Any]) -> None:
   from jinja2 import Environment, FileSystemLoader, select_autoescape
 
+  from jobboards.config import EVOLDIR_INDEX, SCIENCE_CAREERS_BASE
+  from jobboards.source_links import ecoevo_sheet_id
+
+  sheet_id = ecoevo_sheet_id()
+  ecoevo_url = f"https://docs.google.com/spreadsheets/d/{sheet_id}/htmlview"
+
   env = Environment(
       loader=FileSystemLoader(str(ROOT / "templates" / "static_site")),
       autoescape=select_autoescape(["html", "xml"]),
   )
   env.globals["base_path"] = base_path
   env.globals["stats"] = stats
+  env.globals["source_urls"] = {
+      "ecoevojobs": ecoevo_url,
+      "evoldir": EVOLDIR_INDEX,
+      "sciencecareers": f"{SCIENCE_CAREERS_BASE.rstrip('/')}/jobs/",
+  }
 
   pages = {
       "index.html": env.get_template("index.html").render(active_page="index", stats=stats),

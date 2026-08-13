@@ -4,7 +4,7 @@ from datetime import datetime, timezone
 from typing import Callable, Optional
 
 from jobboards.db import connect, init_db, job_stats, purge_stale, set_meta
-from jobboards.scrape.ecoevo import scrape_ecoevo
+from jobboards.scrape.ecoevo import ecoevo_purge_is_safe, scrape_ecoevo
 from jobboards.scrape.evoldir import scrape_evoldir
 
 
@@ -237,7 +237,11 @@ def scrape_all(
 
         with connect() as conn:
             if ecoevo_ok:
-                purge_stale(conn, "ecoevojobs", scrape_ts)
+                safe, reason = ecoevo_purge_is_safe(conn, ecoevo_n, scrape_ts)
+                if safe:
+                    purge_stale(conn, "ecoevojobs", scrape_ts)
+                elif reason:
+                    warnings.append(reason)
             if evoldir_ok and not skip_evoldir:
                 purge_stale(conn, "evoldir", scrape_ts)
             if sciencecareers_ok:

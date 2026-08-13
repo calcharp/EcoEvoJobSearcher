@@ -404,6 +404,16 @@ a:hover { text-decoration: underline; }
   color: var(--text-muted);
 }
 
+a.stat-source-link {
+  text-decoration: none;
+}
+
+a.stat-source-link:hover {
+  color: var(--accent);
+  text-decoration: underline;
+  text-underline-offset: 0.12em;
+}
+
 /* Toolbar */
 .toolbar {
   display: flex;

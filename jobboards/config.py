@@ -5,6 +5,8 @@ from pathlib import Path
 ECOEVO_SHEET_ID = "1frP2LlZy_GibdpXxg_WDoHGjVAZk_8tb-GsPN_Thkms"
 ECOEVO_FACULTY_GID = "332523242"
 ECOEVO_POSTDOC_GID = "900481761"
+# Canonical hub that redirects to the current season workbook.
+ECOEVO_HUB_URL = os.environ.get("ECOEVO_HUB_URL", "https://ecoevojobs.net/")
 
 EVOLDIR_INDEX = "https://www.evoldir.net/brian/Jobs.html"
 EVOLDIR_DETAIL_BASE = "https://www.evoldir.net/brian/evoldir/Jobs//"

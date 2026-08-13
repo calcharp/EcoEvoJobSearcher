@@ -8,12 +8,24 @@ from jobboards.config import (
     ECOEVO_SHEET_ID,
     EVOLDIR_DETAIL_BASE,
 )
+from jobboards.db import get_meta
 
 ECOEVO_NOTES_COL = {"faculty": "J", "postdoc": "I"}
 
 
+def ecoevo_sheet_id() -> str:
+    return get_meta("ecoevo_sheet_id") or ECOEVO_SHEET_ID
+
+
 def ecoevo_sheet_gid(tab: Optional[str]) -> str:
-    return ECOEVO_FACULTY_GID if tab == "faculty" else ECOEVO_POSTDOC_GID
+    if tab == "faculty":
+        return get_meta("ecoevo_faculty_gid") or ECOEVO_FACULTY_GID
+    return get_meta("ecoevo_postdoc_gid") or ECOEVO_POSTDOC_GID
+
+
+def ecoevo_notes_col(tab: Optional[str]) -> str:
+    key = "ecoevo_faculty_notes_col" if tab == "faculty" else "ecoevo_postdoc_notes_col"
+    return get_meta(key) or ECOEVO_NOTES_COL.get(tab or "faculty", "J")
 
 
 def ecoevo_sheet_url(job: dict, *, focus_notes: bool = False) -> Optional[str]:
@@ -22,16 +34,16 @@ def ecoevo_sheet_url(job: dict, *, focus_notes: bool = False) -> Optional[str]:
         return None
     tab = job.get("source_tab") or "faculty"
     gid = ecoevo_sheet_gid(tab)
+    sheet_id = ecoevo_sheet_id()
     base = (
-        f"https://docs.google.com/spreadsheets/d/{ECOEVO_SHEET_ID}/edit"
+        f"https://docs.google.com/spreadsheets/d/{sheet_id}/edit"
         f"?gid={gid}#gid={gid}"
     )
     row = (job.get("source_slug") or "").strip()
     if not row.isdigit():
         return base
     if focus_notes:
-        col = ECOEVO_NOTES_COL.get(tab, "J")
-        range_spec = f"{col}{row}"
+        range_spec = f"{ecoevo_notes_col(tab)}{row}"
     else:
         range_spec = f"A{row}"
     return f"{base}&range={range_spec}"
