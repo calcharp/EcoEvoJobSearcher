@@ -115,11 +115,23 @@
     return bits.length ? `${n} matching ${bits.join(", ")}.` : `${n} from Eco & Evo Jobs.`;
   }
 
-  function buildRss(jobs, stack, opts) {
+  function showXml(xml) {
+    document.open();
+    document.write(
+      "<!DOCTYPE html><html><head><meta charset=\"utf-8\"><title>RSS</title>" +
+        "<style>html,body{margin:0}pre{margin:0;padding:12px 16px;white-space:pre-wrap;" +
+        "word-break:break-word;font:13px/1.45 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace}</style>" +
+        "</head><body><pre id=\"rss-xml\"></pre></body></html>"
+    );
+    document.close();
+    document.getElementById("rss-xml").textContent = xml;
+  }
+
+  function buildRss(jobs, stack, opts, builtAt) {
     const searchUrl = absoluteUrl(
       JobBoardsPageUrl("index.html") + (window.location.search || "")
     );
-    const now = new Date().toUTCString();
+    const now = rfc822(builtAt) || new Date().toUTCString();
     const items = jobs
       .map((job) => {
         const pub = rfc822(job.posted_at || job.updated_at);
@@ -164,9 +176,13 @@ ${items}
       let jobs = JobBoardsStaticQuery.filterJobs(jobsData.jobs || [], opts);
       jobs = applyArea(jobs, area?.bounds, mapData.jobs || []);
 
-      const xml = buildRss(jobs, stack, opts);
-      const blob = new Blob([xml], { type: "application/rss+xml;charset=UTF-8" });
-      location.replace(URL.createObjectURL(blob));
+      const xml = buildRss(
+        jobs,
+        stack,
+        opts,
+        jobsData.stats?.last_fetched_at || jobsData.stats?.generated_at
+      );
+      showXml(xml);
     } catch (err) {
       document.body.textContent = "Could not build the RSS feed.";
       console.error(err);
