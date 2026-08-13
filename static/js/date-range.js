@@ -111,6 +111,24 @@
     return 32;
   }
 
+  function formatBinPeriod(fromIso, toIso, spanDays) {
+    const from = parseDay(fromIso);
+    const to = parseDay(toIso);
+    if (!from || !to) return "";
+    const sameDay = fromIso === toIso;
+    if (sameDay) {
+      return from.toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" });
+    }
+    if (spanDays <= 56) {
+      // Week-scale bins
+      return `${from.toLocaleDateString(undefined, { month: "short", day: "numeric" })} – ${to.toLocaleDateString(undefined, { month: "short", day: "numeric" })}`;
+    }
+    if (from.getFullYear() === to.getFullYear() && from.getMonth() === to.getMonth()) {
+      return from.toLocaleDateString(undefined, { month: "long", year: "numeric" });
+    }
+    return `${from.toLocaleDateString(undefined, { month: "short", year: "2-digit" })} – ${to.toLocaleDateString(undefined, { month: "short", year: "2-digit" })}`;
+  }
+
   function binDailyCounts(daily, minIso, maxIso) {
     const span = daysBetween(minIso, maxIso);
     if (!span || !daily?.length) return [];
@@ -124,12 +142,38 @@
       counts[bucket] += row.count || 0;
     }
     const peak = Math.max(...counts, 1);
-    return counts.map((count, i) => ({
-      count,
-      startIdx: Math.round((i / buckets) * span),
-      endIdx: Math.round(((i + 1) / buckets) * span),
-      heightPct: Math.max(4, Math.round((count / peak) * 100)),
-    }));
+    return counts.map((count, i) => {
+      const startIdx = Math.round((i / buckets) * span);
+      const endIdx = Math.max(startIdx, Math.round(((i + 1) / buckets) * span) - (i === buckets - 1 ? 0 : 1));
+      const fromIso = indexToIso(minIso, maxIso, startIdx);
+      const toIso = indexToIso(minIso, maxIso, endIdx);
+      return {
+        count,
+        startIdx,
+        endIdx,
+        fromIso,
+        toIso,
+        period: formatBinPeriod(fromIso, toIso, span),
+        heightPct: Math.max(4, Math.round((count / peak) * 100)),
+      };
+    });
+  }
+
+  function countInRange(daily, minIso, maxIso, fromIdx, toIdx) {
+    if (!daily?.length) return 0;
+    let n = 0;
+    for (const row of daily) {
+      const idx = dayIndex(minIso, row.day);
+      if (idx >= fromIdx && idx <= toIdx) n += row.count || 0;
+    }
+    return n;
+  }
+
+  function escAttr(s) {
+    return String(s == null ? "" : s)
+      .replace(/&/g, "&amp;")
+      .replace(/"/g, "&quot;")
+      .replace(/</g, "&lt;");
   }
 
   function create(root) {
@@ -138,11 +182,19 @@
     const fieldBtns = root.querySelectorAll(".date-range-field-btn");
     const labelEl = document.getElementById("date-range-label");
     const track = root.querySelector(".date-range-track");
+    const trackWrap = root.querySelector(".date-range-track-wrap") || root;
     const notchesEl = root.querySelector("#date-range-notches");
     const histogramEl = root.querySelector("#date-range-histogram");
     const fill = root.querySelector("#date-range-fill");
     const thumbMin = root.querySelector("#date-thumb-min");
     const thumbMax = root.querySelector("#date-thumb-max");
+
+    const tip = document.createElement("div");
+    tip.className = "date-range-tip";
+    tip.hidden = true;
+    tip.setAttribute("role", "status");
+    tip.setAttribute("aria-live", "polite");
+    trackWrap.appendChild(tip);
 
     let bounds = {};
     let field = "posted_at";
@@ -151,6 +203,7 @@
     let totalDays = 1;
     let suppressFilter = false;
     let onRangeChange = null;
+    let tipMode = null; // "hover" | "drag" | null
 
     function currentBounds() {
       return bounds[field] || {};
@@ -160,6 +213,48 @@
       const b = currentBounds();
       if (!b.min || !b.max) return true;
       return (!fromIso || fromIso <= b.min) && (!toIso || toIso >= b.max);
+    }
+
+    function selectedRange() {
+      const b = currentBounds();
+      if (!b.min || !b.max) return null;
+      const fromIso = indexToIso(b.min, b.max, minIdx);
+      const toIso = indexToIso(b.min, b.max, maxIdx);
+      const count = countInRange(b.daily, b.min, b.max, minIdx, maxIdx);
+      return { fromIso, toIso, count, full: isFullRange(fromIso, toIso) };
+    }
+
+    function placeTip(clientX, clientY) {
+      const rect = trackWrap.getBoundingClientRect();
+      const x = Math.max(8, Math.min(clientX - rect.left, rect.width - 8));
+      const y = Math.max(8, clientY - rect.top - 12);
+      tip.style.left = `${x}px`;
+      tip.style.top = `${y}px`;
+    }
+
+    function showTip(html, clientX, clientY, mode) {
+      tipMode = mode;
+      tip.innerHTML = html;
+      tip.hidden = false;
+      placeTip(clientX, clientY);
+    }
+
+    function hideTip(mode) {
+      if (mode && tipMode && tipMode !== mode) return;
+      tipMode = null;
+      tip.hidden = true;
+      tip.innerHTML = "";
+    }
+
+    function dragTipHtml() {
+      const sel = selectedRange();
+      if (!sel) return "";
+      const rangeText = sel.full
+        ? "All time"
+        : `${formatDisplay(sel.fromIso)} – ${formatDisplay(sel.toIso)}`;
+      const countText =
+        sel.count === 1 ? "1 listing in range" : `${sel.count} listings in range`;
+      return `<strong>${escAttr(rangeText)}</strong><span>${escAttr(countText)}</span>`;
     }
 
     function syncFieldBtns() {
@@ -216,15 +311,19 @@
 
       const fullRange = minIdx === 0 && maxIdx === totalDays;
       histogramEl.innerHTML = bins
-        .map((bin) => {
+        .map((bin, i) => {
           const inRange =
             fullRange || (bin.endIdx >= minIdx && bin.startIdx <= maxIdx);
           const cls = inRange ? "is-in-range" : "is-out-range";
-          const title = bin.count
+          const countText = bin.count
             ? `${bin.count} listing${bin.count === 1 ? "" : "s"}`
-            : "";
+            : "No listings";
           return `
-        <div class="date-histogram-col" title="${title}">
+        <div class="date-histogram-col" data-bin-index="${i}"
+          data-period="${escAttr(bin.period)}"
+          data-count-label="${escAttr(countText)}"
+          data-from="${escAttr(bin.fromIso)}"
+          data-to="${escAttr(bin.toIso)}">
           <span class="date-histogram-bar ${cls}" style="height:${bin.heightPct}%"></span>
         </div>`;
         })
@@ -323,31 +422,41 @@
     function wireThumb(thumb, which) {
       let dragging = false;
 
-      function onPointerMove(clientX) {
+      function onPointerMove(clientX, clientY) {
         const rect = track.getBoundingClientRect();
         const pct = Math.max(0, Math.min(1, (clientX - rect.left) / rect.width));
         const idx = Math.round(pct * totalDays);
         if (which === "min") setIndices(idx, maxIdx, false);
         else setIndices(minIdx, idx, false);
+        showTip(dragTipHtml(), clientX, clientY, "drag");
       }
 
       thumb.addEventListener("pointerdown", (e) => {
         e.preventDefault();
         dragging = true;
+        thumb.classList.add("is-dragging");
         thumb.setPointerCapture(e.pointerId);
-        onPointerMove(e.clientX);
+        onPointerMove(e.clientX, e.clientY);
       });
 
       thumb.addEventListener("pointermove", (e) => {
         if (!dragging) return;
-        onPointerMove(e.clientX);
+        onPointerMove(e.clientX, e.clientY);
       });
 
       thumb.addEventListener("pointerup", (e) => {
         if (!dragging) return;
         dragging = false;
+        thumb.classList.remove("is-dragging");
         thumb.releasePointerCapture(e.pointerId);
         applyFilter();
+        hideTip("drag");
+      });
+
+      thumb.addEventListener("pointercancel", () => {
+        dragging = false;
+        thumb.classList.remove("is-dragging");
+        hideTip("drag");
       });
     }
 
@@ -369,6 +478,26 @@
 
     wireThumb(thumbMin, "min");
     wireThumb(thumbMax, "max");
+
+    if (histogramEl) {
+      histogramEl.addEventListener("pointermove", (e) => {
+        if (tipMode === "drag") return;
+        const col = e.target.closest?.(".date-histogram-col");
+        if (!col || !histogramEl.contains(col)) {
+          hideTip("hover");
+          return;
+        }
+        const period = col.dataset.period || "";
+        const countLabel = col.dataset.countLabel || "";
+        showTip(
+          `<strong>${escAttr(period)}</strong><span>${escAttr(countLabel)}</span>`,
+          e.clientX,
+          e.clientY,
+          "hover"
+        );
+      });
+      histogramEl.addEventListener("pointerleave", () => hideTip("hover"));
+    }
 
     async function init() {
       try {

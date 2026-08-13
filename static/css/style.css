@@ -972,7 +972,8 @@ a.stat-source-link:hover {
   gap: 1px;
   height: 3.1rem;
   margin: 0 0 0.2rem;
-  pointer-events: none;
+  pointer-events: auto;
+  cursor: crosshair;
 }
 
 .date-histogram-col {
@@ -983,13 +984,18 @@ a.stat-source-link:hover {
   height: 100%;
 }
 
+.date-histogram-col:hover .date-histogram-bar {
+  background: rgba(61, 214, 140, 0.9);
+}
+
 .date-histogram-bar {
   display: block;
   width: 100%;
   min-height: 1px;
   border-radius: 1px 1px 0 0;
   background: rgba(61, 214, 140, 0.28);
-  transition: background 0.15s ease, opacity 0.15s ease;
+  transition: background 0.12s ease, opacity 0.12s ease;
+  pointer-events: none;
 }
 
 .date-histogram-bar.is-in-range {
@@ -998,6 +1004,40 @@ a.stat-source-link:hover {
 
 .date-histogram-bar.is-out-range {
   opacity: 0.45;
+}
+
+.date-range-tip {
+  position: absolute;
+  z-index: 20;
+  transform: translate(-50%, -100%);
+  margin-top: -0.35rem;
+  padding: 0.35rem 0.55rem;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius);
+  background: var(--bg-elevated);
+  box-shadow: var(--shadow-md);
+  color: var(--text);
+  font-size: 0.75rem;
+  line-height: 1.25;
+  white-space: nowrap;
+  pointer-events: none;
+}
+
+.date-range-tip strong {
+  display: block;
+  font-weight: 650;
+  color: var(--text);
+}
+
+.date-range-tip span {
+  display: block;
+  margin-top: 0.1rem;
+  color: var(--text-muted);
+  font-weight: 500;
+}
+
+.date-range-thumb.is-dragging {
+  cursor: grabbing;
 }
 
 .date-range-notches {
