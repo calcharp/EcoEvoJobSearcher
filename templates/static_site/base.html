@@ -16,7 +16,7 @@
       } catch (_) {}
     })();
   </script>
-  <link rel="stylesheet" href="{{ base_path }}static/css/style.css">
+  <link rel="stylesheet" href="{{ base_path }}static/css/style.css?v=quiet20">
   {% block head %}{% endblock %}
 </head>
 <body class="{% block body_class %}{% endblock %}">
@@ -24,11 +24,32 @@
     <header class="site-header">
       <div class="brand">
         <div class="brand-icon" aria-hidden="true">
-          <img src="{{ base_path }}static/img/logo.jpg" alt="" width="48" height="48" decoding="async">
+          <img src="{{ base_path }}static/img/logo.jpg" alt="" width="40" height="40" decoding="async">
         </div>
         <div>
           <h1 class="brand-title">Eco &amp; Evo Jobs</h1>
-          <p class="brand-sub">ecoevojobs · EvolDir · Science Careers</p>
+          <div class="stats-bar" id="stats-bar">
+            <div class="stat-card">
+              <span class="stat-value" id="stat-total">{{ stats.total }}</span>
+              <span class="stat-label">total</span>
+            </div>
+            <div class="stat-card">
+              <span class="stat-value" id="stat-ecoevo">{{ stats.ecoevojobs }}</span>
+              <span class="stat-label">ecoevojobs</span>
+            </div>
+            <div class="stat-card">
+              <span class="stat-value" id="stat-evoldir">{{ stats.evoldir }}</span>
+              <span class="stat-label">EvolDir</span>
+            </div>
+            <div class="stat-card">
+              <span class="stat-value" id="stat-sciencecareers">{{ stats.sciencecareers }}</span>
+              <span class="stat-label">Sci Careers</span>
+            </div>
+            <div class="stat-card">
+              <span class="stat-value" id="stat-deadlines">{{ stats.with_deadline }}</span>
+              <span class="stat-label">deadlines</span>
+            </div>
+          </div>
         </div>
       </div>
       <div class="header-actions">
@@ -59,10 +80,10 @@
       {% block content %}{% endblock %}
     </main>
   </div>
-  <script src="{{ base_path }}static/js/static-boot.js"></script>
-  <script src="{{ base_path }}static/js/static-query.js"></script>
-  <script src="{{ base_path }}static/js/filters.js"></script>
-  <script src="{{ base_path }}static/js/app.js"></script>
+  <script src="{{ base_path }}static/js/static-boot.js?v=bool2"></script>
+  <script src="{{ base_path }}static/js/static-query.js?v=or2"></script>
+  <script src="{{ base_path }}static/js/filters.js?v=or4"></script>
+  <script src="{{ base_path }}static/js/app.js?v=or7"></script>
   {% block scripts %}{% endblock %}
 </body>
 </html>

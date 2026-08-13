@@ -135,8 +135,8 @@
   function create(root) {
     if (!root) return null;
 
-    const fieldSelect = root.querySelector("#date-field-select");
-    const labelEl = root.querySelector("#date-range-label");
+    const fieldBtns = root.querySelectorAll(".date-range-field-btn");
+    const labelEl = document.getElementById("date-range-label");
     const track = root.querySelector(".date-range-track");
     const notchesEl = root.querySelector("#date-range-notches");
     const histogramEl = root.querySelector("#date-range-histogram");
@@ -162,7 +162,30 @@
       return (!fromIso || fromIso <= b.min) && (!toIso || toIso >= b.max);
     }
 
+    function syncFieldBtns() {
+      fieldBtns.forEach((btn) => {
+        const on = btn.dataset.field === field;
+        btn.classList.toggle("is-active", on);
+        btn.setAttribute("aria-pressed", on ? "true" : "false");
+      });
+    }
+
+    function setTimelineField(next) {
+      const resolved = next === "apply_by" ? "apply_by" : "posted_at";
+      if (field === resolved) return;
+      field = resolved;
+      syncFieldBtns();
+      const b = currentBounds();
+      totalDays = daysBetween(b.min, b.max);
+      minIdx = 0;
+      maxIdx = totalDays;
+      renderNotches();
+      renderThumbs();
+      applyFilter();
+    }
+
     function updateLabel() {
+      if (!labelEl) return;
       const b = currentBounds();
       if (!b.min || !b.max) {
         labelEl.textContent = "All time";
@@ -272,7 +295,7 @@
       suppressFilter = true;
       if (dateFilter) {
         field = dateFilter.field === "apply_by" ? "apply_by" : "posted_at";
-        if (fieldSelect) fieldSelect.value = field;
+        syncFieldBtns();
         const boundsForField = bounds[field] || {};
         totalDays = daysBetween(boundsForField.min, boundsForField.max);
         const fromIdx = dateFilter.from
@@ -328,16 +351,10 @@
       });
     }
 
-    fieldSelect?.addEventListener("change", () => {
-      field = fieldSelect.value === "apply_by" ? "apply_by" : "posted_at";
-      const b = currentBounds();
-      totalDays = daysBetween(b.min, b.max);
-      minIdx = 0;
-      maxIdx = totalDays;
-      renderNotches();
-      renderThumbs();
-      applyFilter();
+    fieldBtns.forEach((btn) => {
+      btn.addEventListener("click", () => setTimelineField(btn.dataset.field));
     });
+    syncFieldBtns();
 
     track?.addEventListener("click", (e) => {
       if (e.target === thumbMin || e.target === thumbMax) return;
@@ -378,6 +395,10 @@
     return {
       setFromFilter,
       resetToFull,
+      setField: setTimelineField,
+      getField() {
+        return field;
+      },
       onRangeChange(fn) {
         onRangeChange = fn;
       },

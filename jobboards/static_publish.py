@@ -29,6 +29,7 @@ from jobboards.geocode import (
 from jobboards.notes import parse_notes_thread
 from jobboards.scrape.runner import ScrapeState, scrape_all
 from jobboards.subjects import subject_term_counts
+from jobboards.search_suggest import search_suggest_index
 
 ROOT = Path(__file__).resolve().parent.parent
 GEO_CACHE_SEED = ROOT / "data" / "geo-cache.json"
@@ -130,6 +131,7 @@ def render_site_pages(out_dir: Path, base_path: str, stats: dict[str, Any]) -> N
       "index.html": env.get_template("index.html").render(active_page="index", stats=stats),
       "subjects.html": env.get_template("subjects.html").render(active_page="subjects", stats=stats),
       "job.html": env.get_template("job.html").render(active_page="job", stats=stats),
+      "rss.html": env.get_template("rss.html").render(active_page="", stats=stats),
       "404.html": env.get_template("404.html").render(active_page="", stats=stats),
   }
   for name, html in pages.items():
@@ -226,6 +228,7 @@ def publish(
         "terms": terms,
         "total_jobs": stats.get("total", 0),
     })
+    write_json(data_dir / "search-suggest.json", search_suggest_index(min_count=2))
 
     copy_static_assets(out_dir)
     render_site_pages(out_dir, base_path, stats)

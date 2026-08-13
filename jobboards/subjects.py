@@ -65,6 +65,7 @@ BUILTIN_PHRASES = sorted(
         "anatomy and physiology",
         "anatomy & physiology",
         "biodiversity science",
+        "genomics",
     ],
     key=len,
     reverse=True,

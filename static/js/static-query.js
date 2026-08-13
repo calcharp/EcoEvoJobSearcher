@@ -23,9 +23,34 @@
     return jobSources(job).includes(source);
   }
 
-  function matchesTerms(job, terms) {
-    if (!terms || !terms.length) return true;
-    return terms.every((term) => jobMatchesTerm(job, term));
+  function matchesClause(job, clause) {
+    const phrase = String(clause.phrase || "").trim();
+    if (phrase) {
+      const variants = Array.isArray(clause.variants) && clause.variants.length
+        ? clause.variants
+        : [phrase];
+      if (!variants.some((v) => jobMatchesTerm(job, v))) return false;
+    }
+    if (!matchesSource(job, clause.source)) return false;
+    return true;
+  }
+
+  function clauseHasConstraint(clause) {
+    return Boolean(
+      String(clause.phrase || "").trim() ||
+        (clause.source && clause.source !== "all")
+    );
+  }
+
+  function matchesClauses(job, clauses) {
+    const rows = (clauses || []).filter(clauseHasConstraint);
+    if (!rows.length) return true;
+    let acc = matchesClause(job, rows[0]);
+    for (let i = 0; i < rows.length - 1; i++) {
+      const next = matchesClause(job, rows[i + 1]);
+      acc = rows[i].join === "AND" ? acc && next : acc || next;
+    }
+    return acc;
   }
 
   function matchesDate(job, dateRange) {
@@ -93,7 +118,7 @@
   function filterJobs(jobs, opts) {
     let out = jobs;
     out = out.filter((j) => matchesSource(j, opts.source));
-    out = out.filter((j) => matchesTerms(j, opts.terms));
+    out = out.filter((j) => matchesClauses(j, opts.clauses));
     out = out.filter((j) => matchesDate(j, opts.dateRange));
     out = out.filter((j) => matchesOpen(j, opts.openOnly));
     out = out.filter((j) => matchesRecent(j, opts.recentOnly));

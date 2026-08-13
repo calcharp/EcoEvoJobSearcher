@@ -2,7 +2,8 @@
   let stack = [];
   let nextId = 1;
   const listeners = new Set();
-  const SESSION_KEY = "jobboards-session";
+  const SESSION_KEY = "jobboards-session-v3";
+  const SOURCES = new Set(["ecoevojobs", "evoldir", "sciencecareers"]);
 
   function makeId() {
     return String(nextId++);
@@ -22,39 +23,129 @@
     return `${name}: ${start} – ${end}`;
   }
 
+  function validSource(s) {
+    return SOURCES.has(s) ? s : "all";
+  }
+
+  function makeClause(partial) {
+    const phrase = String(partial.phrase || partial.value || "").trim();
+    return {
+      id: partial.id || makeId(),
+      type: "clause",
+      phrase,
+      value: phrase,
+      label: phrase || "Filter",
+      source: validSource(partial.source),
+      join: partial.join === "AND" ? "AND" : "OR",
+    };
+  }
+
+  function clauseIsBlank(f) {
+    return !String(f.phrase || "").trim() && (!f.source || f.source === "all");
+  }
+
+  function normalizeFilter(f) {
+    if (!f) return null;
+    if (f.type === "clause" || f.type === "search" || f.type === "keyword") {
+      return makeClause(f);
+    }
+    return { ...f, id: f.id || makeId() };
+  }
+
   function defaultStack() {
-    return [{ id: makeId(), type: "open", label: "Open applications" }];
+    return [
+      { id: makeId(), type: "open", label: "Open applications" },
+      makeClause({}),
+    ];
   }
 
   function defaultViewPrefs() {
-    return { source: "all", sort: "apply_by", order: "asc" };
+    return { sort: "apply_by", order: "asc" };
   }
 
   function serializeFilter(f) {
     const out = { type: f.type, label: f.label };
     if (f.value != null) out.value = f.value;
-    if (f.field != null) out.field = f.field;
-    if (f.from != null) out.from = f.from;
-    if (f.to != null) out.to = f.to;
+    if (f.phrase != null) out.phrase = f.phrase;
+    if (f.source != null) out.source = f.source;
+    if (f.type === "date") {
+      if (f.field != null) out.field = f.field;
+      if (f.from != null) out.from = f.from;
+      if (f.to != null) out.to = f.to;
+    }
+    if (f.join != null) out.join = f.join;
     if (f.bounds != null) out.bounds = f.bounds;
     return out;
   }
 
   function deserializeStack(filters) {
-    return (filters || []).map((f) => ({ ...f, id: makeId() }));
+    return (filters || []).map((f) => normalizeFilter(f)).filter(Boolean);
+  }
+
+  function encodeClause(f) {
+    return JSON.stringify({
+      p: f.phrase || "",
+      s: f.source || "all",
+      j: f.join || "OR",
+    });
+  }
+
+  function decodeClause(raw) {
+    try {
+      const o = JSON.parse(raw);
+      if (o && typeof o === "object") {
+        return makeClause({
+          phrase: o.p || o.phrase || "",
+          source: o.s || o.source,
+          join: o.j || o.join,
+        });
+      }
+    } catch (_) {}
+    const parts = String(raw || "").split("~").map((p) => {
+      try {
+        return decodeURIComponent(p);
+      } catch {
+        return p;
+      }
+    });
+    return makeClause({
+      phrase: parts[0] || "",
+      join: parts[4] || parts[1],
+    });
   }
 
   function parseUrl(search) {
     const params = new URLSearchParams(search || location.search);
     const filters = [];
-    params.getAll("q").forEach((v) => {
-      const t = v.trim();
-      if (t) filters.push({ id: makeId(), type: "search", value: t, label: t });
-    });
-    params.getAll("kw").forEach((v) => {
-      const t = v.trim();
-      if (t) filters.push({ id: makeId(), type: "keyword", value: t, label: t });
-    });
+    const encoded = params.getAll("c");
+    if (encoded.length) {
+      encoded.forEach((raw) => {
+        const clause = decodeClause(raw);
+        if (clause.phrase || (clause.source && clause.source !== "all")) {
+          filters.push(clause);
+        }
+      });
+    } else {
+      params.getAll("q").forEach((v) => {
+        const t = v.trim();
+        if (t) filters.push(makeClause({ phrase: t }));
+      });
+      params.getAll("kw").forEach((v) => {
+        const t = v.trim();
+        if (t) filters.push(makeClause({ phrase: t }));
+      });
+    }
+    const src = validSource(params.get("source"));
+    if (src !== "all") {
+      const clauses = filters.filter((f) => f.type === "clause");
+      if (clauses.length) {
+        clauses.forEach((c) => {
+          if (!c.source || c.source === "all") c.source = src;
+        });
+      } else {
+        filters.push(makeClause({ source: src }));
+      }
+    }
     const bbox = parseBbox(params.get("bbox"));
     if (bbox) filters.push({ id: makeId(), type: "area", bounds: bbox, label: "Map area" });
     const from = (params.get("from") || "").trim();
@@ -90,15 +181,17 @@
 
   function parseUrlOrDefaults(search) {
     const params = new URLSearchParams(search || location.search);
-    if (!params.toString()) return defaultStack();
-    return parseUrl(search);
+    const filters = !params.toString() ? defaultStack() : parseUrl(search);
+    if (!filters.some((f) => f.type === "clause")) filters.push(makeClause({}));
+    return filters;
   }
 
   function stackToParams(filters) {
     const params = new URLSearchParams();
     for (const f of filters) {
-      if (f.type === "search") params.append("q", f.value);
-      else if (f.type === "keyword") params.append("kw", f.value);
+      if (f.type === "clause") {
+        if (!clauseIsBlank(f)) params.append("c", encodeClause(f));
+      }
       else if (f.type === "area" && f.bounds) {
         const b = f.bounds;
         params.set("bbox", `${b.south},${b.west},${b.north},${b.east}`);
@@ -118,16 +211,14 @@
   function buildIndexQuery(filters, view) {
     const params = stackToParams(filters);
     const v = { ...defaultViewPrefs(), ...(view || {}) };
-    if (v.source && v.source !== "all") params.set("source", v.source);
     if (v.sort) params.set("sort", v.sort);
     if (v.order) params.set("order", v.order);
     return params.toString();
   }
 
   function getViewPrefs() {
-    if (typeof document !== "undefined" && document.getElementById("source-filter")) {
+    if (typeof document !== "undefined" && document.getElementById("sort-filter")) {
       return {
-        source: document.getElementById("source-filter")?.value || "all",
         sort: document.getElementById("sort-filter")?.value || "apply_by",
         order: document.getElementById("order-filter")?.value || "asc",
       };
@@ -164,10 +255,10 @@
     if (
       val &&
       !filters.some(
-        (f) => f.type === "keyword" && f.value.toLowerCase() === val.toLowerCase()
+        (f) => f.type === "clause" && String(f.phrase || "").toLowerCase() === val.toLowerCase()
       )
     ) {
-      filters.push({ id: makeId(), type: "keyword", value: val, label: val });
+      filters.push(makeClause({ phrase: val }));
     }
     const view = session?.view || defaultViewPrefs();
     const qs = buildIndexQuery(filters, view);
@@ -180,12 +271,12 @@
   }
 
   function init(filters) {
-    stack = (filters || []).map((f) => ({ ...f, id: f.id || makeId() }));
+    stack = deserializeStack(filters);
     notify();
   }
 
   function setStack(filters) {
-    stack = (filters || []).map((f) => ({ ...f, id: f.id || makeId() }));
+    stack = deserializeStack(filters);
     notify();
   }
 
@@ -222,47 +313,80 @@
 
     if (filter.type === "open") {
       if (stack.some((f) => f.type === "open")) return;
-      stack.push({
-        id: makeId(),
-        type: "open",
-        label: filter.label || "Open applications",
-      });
+      stack.push({ id: makeId(), type: "open", label: "Open applications" });
       notify();
       return;
     }
 
     if (filter.type === "recent") {
       if (stack.some((f) => f.type === "recent")) return;
-      stack.push({
-        id: makeId(),
-        type: "recent",
-        label: filter.label || "New since yesterday",
-      });
+      stack.push({ id: makeId(), type: "recent", label: "New since yesterday" });
       notify();
       return;
     }
 
-    const val = (filter.value || "").trim();
-    if (!val) return;
-    if (stack.some((f) => f.type === filter.type && f.value.toLowerCase() === val.toLowerCase())) {
-      return;
+    if (filter.type === "clause" || filter.type === "search" || filter.type === "keyword") {
+      const clause = makeClause(filter);
+      if (clauseIsBlank(clause)) {
+        if (stack.some((f) => f.type === "clause" && clauseIsBlank(f))) return;
+        stack.push(clause);
+        notify();
+        return;
+      }
+      if (clause.phrase) {
+        const blank = stack.find((f) => f.type === "clause" && clauseIsBlank(f));
+        if (blank) {
+          updateClause(blank.id, {
+            phrase: clause.phrase,
+            source: clause.source,
+            join: clause.join,
+          });
+          return;
+        }
+      }
+      if (
+        stack.some(
+          (f) =>
+            f.type === "clause" &&
+            String(f.phrase || "").toLowerCase() === String(clause.phrase || "").toLowerCase() &&
+            (f.source || "all") === clause.source
+        )
+      ) {
+        return;
+      }
+      stack.push(clause);
+      notify();
     }
-    stack.push({
-      id: makeId(),
-      type: filter.type,
-      value: val,
-      label: filter.label || val,
-    });
+  }
+
+  function updateClause(id, patch) {
+    const idx = stack.findIndex((f) => f.id === id && f.type === "clause");
+    if (idx < 0) return;
+    stack[idx] = makeClause({ ...stack[idx], ...patch, id });
+    notify();
+  }
+
+  function moveClause(fromId, toId) {
+    if (!fromId || fromId === toId) return;
+    const clauses = stack.filter((f) => f.type === "clause");
+    const others = stack.filter((f) => f.type !== "clause");
+    const fromIdx = clauses.findIndex((f) => f.id === fromId);
+    const toIdx = clauses.findIndex((f) => f.id === toId);
+    if (fromIdx < 0 || toIdx < 0) return;
+    const [moved] = clauses.splice(fromIdx, 1);
+    clauses.splice(toIdx, 0, moved);
+    stack = [...clauses, ...others];
     notify();
   }
 
   function remove(id) {
     stack = stack.filter((f) => f.id !== id);
+    if (!stack.some((f) => f.type === "clause")) stack.push(makeClause({}));
     notify();
   }
 
   function clear() {
-    stack = [];
+    stack = [makeClause({})];
     notify();
   }
 
@@ -272,6 +396,10 @@
 
   function getDateFilter() {
     return stack.find((f) => f.type === "date") || null;
+  }
+
+  function getClauses() {
+    return stack.filter((f) => f.type === "clause");
   }
 
   function isOpenFilterActive() {
@@ -300,21 +428,6 @@
     notify();
   }
 
-  /** Ensure open + recent are on (does not remove other filters). Returns true if stack changed. */
-  function ensureOpenAndRecent() {
-    let changed = false;
-    if (!isOpenFilterActive()) {
-      stack.push({ id: makeId(), type: "open", label: "Open applications" });
-      changed = true;
-    }
-    if (!isRecentFilterActive()) {
-      stack.push({ id: makeId(), type: "recent", label: "New since yesterday" });
-      changed = true;
-    }
-    if (changed) notify();
-    return changed;
-  }
-
   function buildApiParams(source, sort, order) {
     const params = stackToParams(stack);
     params.set("source", source);
@@ -326,7 +439,6 @@
   function toUrl() {
     const params = stackToParams(stack);
     const view = getViewPrefs();
-    if (view.source && view.source !== "all") params.set("source", view.source);
     if (view.sort) params.set("sort", view.sort);
     if (view.order) params.set("order", view.order);
     const qs = params.toString();
@@ -349,16 +461,18 @@
     init,
     setStack,
     add,
+    updateClause,
+    moveClause,
     remove,
     clear,
     getStack: () => [...stack],
+    getClauses,
     getAreaFilter,
     getDateFilter,
     isOpenFilterActive,
     toggleOpenFilter,
     isRecentFilterActive,
     toggleRecentFilter,
-    ensureOpenAndRecent,
     buildApiParams,
     buildIndexQuery,
     indexUrlAddingKeyword,

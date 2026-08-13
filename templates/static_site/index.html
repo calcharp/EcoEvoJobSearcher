@@ -7,98 +7,59 @@
 <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.Default.css" crossorigin="">
 {% endblock %}
 {% block content %}
-<section class="stats-bar" id="stats-bar">
-  <div class="stat-card">
-    <span class="stat-value" id="stat-total">{{ stats.total }}</span>
-    <span class="stat-label">Total listings</span>
-  </div>
-  <div class="stat-card">
-    <span class="stat-value" id="stat-ecoevo">{{ stats.ecoevojobs }}</span>
-    <span class="stat-label">ecoevojobs</span>
-  </div>
-  <div class="stat-card">
-    <span class="stat-value" id="stat-evoldir">{{ stats.evoldir }}</span>
-    <span class="stat-label">EvolDir</span>
-  </div>
-  <div class="stat-card">
-    <span class="stat-value" id="stat-sciencecareers">{{ stats.sciencecareers }}</span>
-    <span class="stat-label">Science Careers</span>
-  </div>
-  <div class="stat-card">
-    <span class="stat-value" id="stat-deadlines">{{ stats.with_deadline }}</span>
-    <span class="stat-label">With deadline</span>
-  </div>
-</section>
-
 <section class="toolbar">
-  <div class="toolbar-row">
-  <div class="search-wrap">
-    <span class="search-icon" aria-hidden="true">⌕</span>
-    <input type="search" id="search-input" class="search-input" placeholder="Add search filter (Enter)…" autocomplete="off">
-  </div>
-  <div class="toolbar-filters">
-    <select id="source-filter" class="select" aria-label="Source">
-      <option value="all">All sources</option>
-      <option value="ecoevojobs">ecoevojobs</option>
-      <option value="evoldir">EvolDir</option>
-      <option value="sciencecareers">Science Careers</option>
-    </select>
-    <select id="sort-filter" class="select" aria-label="Sort by">
-      <option value="apply_by" selected>Apply by date</option>
-      <option value="posted_at">Posted date</option>
-      <option value="updated_at">Last updated</option>
-      <option value="institution">Institution A–Z</option>
-    </select>
-    <select id="order-filter" class="select" aria-label="Order">
-      <option value="asc" selected>Ascending</option>
-      <option value="desc">Descending</option>
-    </select>
-    <button
-      type="button"
-      class="filter-toggle-btn is-active"
-      id="open-jobs-toggle"
-      aria-pressed="true"
-      title="Show only jobs still accepting applications (or with no deadline listed)"
-    >Open only</button>
-    <button
-      type="button"
-      class="filter-toggle-btn"
-      id="recent-jobs-toggle"
-      aria-pressed="false"
-      title="Show only jobs posted today or yesterday (your local time)"
-    >New since yesterday</button>
-    <button
-      type="button"
-      class="filter-toggle-btn"
-      id="sort-new-btn"
-      title="Open only + new since yesterday, sorted by newest posted first"
-    >Sort new</button>
-  </div>
-  </div>
   <div class="toolbar-secondary">
-    <div class="filter-stack-wrap" id="filter-stack-wrap">
-      <span class="filter-stack-label">Active filters</span>
-      <div class="filter-stack" id="filter-stack"></div>
-      <button type="button" class="filter-stack-clear" id="filter-stack-clear">Clear all</button>
-    </div>
-    <div class="date-range-panel" id="date-range-panel">
-      <div class="date-range-header">
-        <select id="date-field-select" class="select select-sm" aria-label="Date field">
-          <option value="posted_at" selected>Posted date</option>
-          <option value="apply_by">Apply-by date</option>
-        </select>
-        <span class="date-range-label" id="date-range-label">All time</span>
+    <div class="toolbar-top">
+      <div class="filter-stack-wrap" id="filter-stack-wrap">
+        <div class="clause-list" id="clause-list"></div>
+        <div class="filter-stack" id="filter-stack"></div>
       </div>
-      <div class="date-range-slider" id="date-range-slider">
-        <div class="date-range-track-wrap">
-          <div class="date-range-notches" id="date-range-notches" aria-hidden="true"></div>
-          <div class="date-range-histogram" id="date-range-histogram" aria-hidden="true"></div>
-          <div class="date-range-track">
-            <div class="date-range-fill" id="date-range-fill"></div>
-            <button type="button" class="date-range-thumb" id="date-thumb-min" aria-label="Range start"></button>
-            <button type="button" class="date-range-thumb" id="date-thumb-max" aria-label="Range end"></button>
+      <div class="date-range-panel" id="date-range-panel">
+        <div class="date-range-slider" id="date-range-slider">
+          <div class="date-range-field" role="group" aria-label="Timeline date">
+            <button type="button" class="date-range-field-btn is-active" data-field="posted_at" aria-pressed="true">Posted</button>
+            <button type="button" class="date-range-field-btn" data-field="apply_by" aria-pressed="false">Deadline</button>
+          </div>
+          <div class="date-range-track-wrap">
+            <div class="date-range-notches" id="date-range-notches" aria-hidden="true"></div>
+            <div class="date-range-histogram" id="date-range-histogram" aria-hidden="true"></div>
+            <div class="date-range-track">
+              <div class="date-range-fill" id="date-range-fill"></div>
+              <button type="button" class="date-range-thumb" id="date-thumb-min" aria-label="Range start"></button>
+              <button type="button" class="date-range-thumb" id="date-thumb-max" aria-label="Range end"></button>
+            </div>
           </div>
         </div>
+      </div>
+    </div>
+    <div class="toolbar-bottom">
+      <div class="clause-actions">
+        <button type="button" class="clause-add-btn" id="clause-add-btn">Add</button>
+        <button type="button" class="filter-stack-clear" id="filter-stack-clear">Clear</button>
+        <button
+          type="button"
+          class="filter-toggle-btn is-active"
+          id="open-jobs-toggle"
+          aria-pressed="true"
+          title="Show only jobs still accepting applications (or with no deadline listed)"
+        >Open only</button>
+        <button
+          type="button"
+          class="filter-toggle-btn"
+          id="new-jobs-btn"
+          aria-pressed="false"
+          title="Show only jobs posted today or yesterday"
+        >New jobs</button>
+      </div>
+      <div class="sort-panel">
+        <div class="view-sort-btns" role="group" aria-label="Sort by">
+          <button type="button" class="view-sort-btn" data-sort="posted_at" aria-pressed="false" title="Sort by date posted">Posted<span class="view-sort-dir" aria-hidden="true"></span></button>
+          <button type="button" class="view-sort-btn is-active is-asc" data-sort="apply_by" aria-pressed="true" title="Sort by application deadline">Deadline<span class="view-sort-dir" aria-hidden="true"></span></button>
+          <button type="button" class="view-sort-btn" data-sort="updated_at" aria-pressed="false" title="Sort by last updated">Updated<span class="view-sort-dir" aria-hidden="true"></span></button>
+          <button type="button" class="view-sort-btn" data-sort="institution" aria-pressed="false" title="Sort by institution">Name<span class="view-sort-dir" aria-hidden="true"></span></button>
+        </div>
+        <input type="hidden" id="sort-filter" value="apply_by">
+        <input type="hidden" id="order-filter" value="asc">
       </div>
     </div>
   </div>
@@ -108,7 +69,14 @@
   <div class="jobs-panel">
     <div class="jobs-panel-header">
       <p class="jobs-result-count" id="jobs-result-count" aria-live="polite">Loading…</p>
-      <button type="button" class="btn btn-ghost btn-sm" id="export-csv-btn" title="Download currently shown jobs as CSV">Export CSV</button>
+      <div class="jobs-header-actions">
+        <a class="jobs-rss-link" id="jobs-rss-link" href="{{ base_path }}rss.html" title="RSS feed of the currently shown jobs">RSS</a>
+        <button type="button" class="jobs-export-btn" id="export-csv-btn" title="Download currently shown jobs as CSV" aria-label="Download currently shown jobs as CSV">
+          <svg viewBox="0 0 24 24" aria-hidden="true">
+            <path d="M12 3v12M8 11l4 4 4-4M5 21h14" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+        </button>
+      </div>
     </div>
     <div class="jobs-list" id="jobs-list">
       <p class="empty-state" id="jobs-placeholder">Loading jobs…</p>
@@ -128,8 +96,9 @@
   window.JobBoardsHasPreview = false;
   window.JobBoardsInitialFilters = [];
 </script>
-<script src="{{ base_path }}static/js/date-range.js"></script>
+<script src="{{ base_path }}static/js/date-range.js?v=quiet6"></script>
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" crossorigin=""></script>
 <script src="https://unpkg.com/leaflet.markercluster@1.5.3/dist/leaflet.markercluster.js" crossorigin=""></script>
 <script src="{{ base_path }}static/js/job-map.js"></script>
+<script src="{{ base_path }}static/js/search-suggest.js?v=bool3"></script>
 {% endblock %}

@@ -15,8 +15,8 @@
   let resultsInFlight = false;
   let pendingReloadOpts = null;
   let reloadTimer = null;
-
-  const FILTER_TYPE_LABELS = { search: "Search", keyword: "Keyword", area: "Area", date: "Date", open: "Open", recent: "Recent" };
+  let focusNewClause = false;
+  let listPaintGen = 0;
 
   function jobDetailHref(jobId) {
     return JobBoardsJobUrl(jobId);
@@ -25,18 +25,78 @@
   function applyViewPrefsFromUrl() {
     if (!window.JobBoardsFilters) return;
     const prefs = JobBoardsFilters.parseViewPrefs();
-    const sourceEl = document.getElementById("source-filter");
     const sortEl = document.getElementById("sort-filter");
     const orderEl = document.getElementById("order-filter");
-    if (prefs.source && sourceEl) sourceEl.value = prefs.source;
     if (prefs.sort && sortEl) sortEl.value = prefs.sort;
     if (prefs.order && orderEl) orderEl.value = prefs.order;
+    syncViewBar();
+  }
+
+  function defaultSortOrder(sort) {
+    return sort === "posted_at" || sort === "updated_at" ? "desc" : "asc";
+  }
+
+  function syncViewBar() {
+    const sort = document.getElementById("sort-filter")?.value || "apply_by";
+    const order = document.getElementById("order-filter")?.value || "asc";
+    document.querySelectorAll(".view-sort-btn").forEach((btn) => {
+      const val = btn.dataset.sort;
+      const on = val === sort;
+      btn.classList.toggle("is-active", on);
+      btn.classList.toggle("is-asc", on && order === "asc");
+      btn.classList.toggle("is-desc", on && order === "desc");
+      btn.setAttribute("aria-pressed", on ? "true" : "false");
+      const dir = on ? (order === "desc" ? "descending" : "ascending") : "sort";
+      const names = {
+        posted_at: "date posted",
+        apply_by: "deadline",
+        updated_at: "last updated",
+        institution: "institution",
+      };
+      btn.title = on
+        ? `Sorted by ${names[val] || val}, ${dir}. Click to reverse.`
+        : `Sort by ${names[val] || val}`;
+    });
+  }
+
+  function persistViewAndReload() {
+    syncViewBar();
+    if (window.JobBoardsFilters) JobBoardsFilters.saveSession();
+    syncFilterUrl();
+    syncRssLink();
+    syncNewJobsButton();
+    scheduleReloadResults({ resetFit: true });
+  }
+
+  function wireViewBar() {
+    document.querySelectorAll(".view-sort-btn").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        const sortEl = document.getElementById("sort-filter");
+        const orderEl = document.getElementById("order-filter");
+        const val = btn.dataset.sort;
+        if (!sortEl || !orderEl) return;
+        if (sortEl.value === val) {
+          orderEl.value = orderEl.value === "desc" ? "asc" : "desc";
+        } else {
+          sortEl.value = val;
+          orderEl.value = defaultSortOrder(val);
+        }
+        persistViewAndReload();
+      });
+    });
   }
 
   function syncFilterUrl() {
     if (window.JobBoardsFilters && window.JobBoardsPage === "index") {
       window.history.replaceState(null, "", JobBoardsFilters.toUrl());
     }
+  }
+
+  function syncRssLink() {
+    const el = document.getElementById("jobs-rss-link");
+    if (!el || !window.JobBoardsFilters) return;
+    const raw = JobBoardsFilters.toUrl();
+    el.href = String(raw || "").replace(/index\.html/i, "rss.html") || JobBoardsPageUrl("rss.html");
   }
 
   function currentTheme() {
@@ -79,6 +139,13 @@
     const d = document.createElement("div");
     d.textContent = s;
     return d.innerHTML;
+  }
+
+  function escAttr(s) {
+    return String(s ?? "")
+      .replace(/&/g, "&amp;")
+      .replace(/"/g, "&quot;")
+      .replace(/</g, "&lt;");
   }
 
   function deadlineClass(days) {
@@ -198,10 +265,21 @@
 
   function getFilterOpts() {
     const stack = window.JobBoardsFilters?.getStack() || [];
-    const terms = [];
+    const clauses = [];
     let dateRange = null;
     for (const f of stack) {
-      if (f.type === "search" || f.type === "keyword") terms.push(f.value);
+      if (f.type === "clause") {
+        const phrase = String(f.phrase || f.value || "").trim();
+        const expanded = phrase ? window.JobBoardsSearchSuggest?.expand(phrase) : null;
+        clauses.push({
+          phrase,
+          source: f.source === "ecoevojobs" || f.source === "evoldir" || f.source === "sciencecareers"
+            ? f.source
+            : "all",
+          join: f.join === "AND" ? "AND" : "OR",
+          variants: expanded && expanded.length ? expanded : phrase ? [phrase] : [],
+        });
+      }
       if (f.type === "date") {
         dateRange = {
           field: f.field === "apply_by" ? "apply_by" : "posted_at",
@@ -211,10 +289,10 @@
       }
     }
     return {
-      source: document.getElementById("source-filter")?.value || "all",
+      source: "all",
       sort: document.getElementById("sort-filter")?.value || "apply_by",
       order: document.getElementById("order-filter")?.value || "asc",
-      terms,
+      clauses,
       dateRange: dateRange && (dateRange.from || dateRange.to) ? dateRange : null,
       openOnly: stack.some((f) => f.type === "open"),
       recentOnly: stack.some((f) => f.type === "recent"),
@@ -344,11 +422,12 @@
     }
   }
 
-  function renderJobsList(list, jobs) {
+  function renderJobsList(list, jobs, gen) {
     const CHUNK = 40;
     let index = 0;
     list.innerHTML = "";
     function paint() {
+      if (gen !== listPaintGen) return;
       const end = Math.min(index + CHUNK, jobs.length);
       list.insertAdjacentHTML("beforeend", jobs.slice(index, end).map(renderJobCard).join(""));
       index = end;
@@ -360,6 +439,7 @@
   function applyDisplay(opts = {}) {
     const list = document.getElementById("jobs-list");
     if (!list) return;
+    const gen = ++listPaintGen;
 
     const listJobs = listJobsForDisplay();
     const hasArea = !!window.JobBoardsFilters?.getAreaFilter();
@@ -367,7 +447,7 @@
     if (!listJobs.length) {
       list.innerHTML = `<p class="empty-state">${emptyListMessage(hasArea)}</p>`;
     } else {
-      renderJobsList(list, listJobs);
+      renderJobsList(list, listJobs, gen);
     }
 
     updateResultCount(listJobs.length);
@@ -388,21 +468,173 @@
     updateMapFootnote();
   }
 
+  function clauseRowHtml(f) {
+    const src = f.source || "all";
+    return `
+      <div class="clause-row" data-clause-id="${escAttr(f.id)}">
+        <button type="button" class="clause-drag" aria-label="Reorder" title="Drag to reorder">⠿</button>
+        <div class="clause-phrase-wrap">
+          <input type="text" class="clause-phrase" data-clause-field="phrase" value="${escAttr(f.phrase || "")}" placeholder="Phrase" autocomplete="off" aria-label="Phrase" aria-autocomplete="list" aria-controls="search-suggest">
+        </div>
+        <select class="select select-sm clause-source" data-clause-field="source" aria-label="Source">
+          <option value="all"${src === "all" ? " selected" : ""}>All</option>
+          <option value="ecoevojobs"${src === "ecoevojobs" ? " selected" : ""}>ecoevojobs</option>
+          <option value="evoldir"${src === "evoldir" ? " selected" : ""}>EvolDir</option>
+          <option value="sciencecareers"${src === "sciencecareers" ? " selected" : ""}>Sci Careers</option>
+        </select>
+        <select class="select select-sm clause-join" data-clause-field="join" aria-label="AND or OR" title="Combines this row with the next one">
+          <option value="OR"${f.join !== "AND" ? " selected" : ""}>OR</option>
+          <option value="AND"${f.join === "AND" ? " selected" : ""}>AND</option>
+        </select>
+        <button type="button" class="clause-remove" data-filter-id="${escAttr(f.id)}" aria-label="Remove">×</button>
+      </div>`;
+  }
+
+  function renderClauseList(clauses) {
+    const el = document.getElementById("clause-list");
+    if (!el) return;
+    const ids = clauses.map((c) => c.id).join(",");
+    const active = document.activeElement;
+    const editing = el.contains(active);
+    if (el.dataset.ids === ids) {
+      clauses.forEach((c) => {
+        const row = el.querySelector(`[data-clause-id="${c.id}"]`);
+        if (!row) return;
+        row.querySelectorAll("[data-clause-field]").forEach((input) => {
+          if (editing && (input === active || input.contains(active))) return;
+          const field = input.dataset.clauseField;
+          const next = field === "phrase" ? c.phrase || ""
+            : field === "source" ? (c.source || "all")
+            : field === "join" ? (c.join === "AND" ? "AND" : "OR")
+            : null;
+          if (next != null && input.value !== next) input.value = next;
+        });
+      });
+      return;
+    }
+    const firstPaint = el.dataset.ready !== "1";
+    el.dataset.ready = "1";
+    el.dataset.ids = ids;
+    if (!clauses.length) {
+      el.innerHTML = "";
+      focusNewClause = false;
+      return;
+    }
+    el.innerHTML = clauses.map((c) => clauseRowHtml(c)).join("");
+    if (!firstPaint && focusNewClause) {
+      el.querySelector(".clause-row:last-child .clause-phrase")?.focus();
+    }
+    focusNewClause = false;
+  }
+
   function renderFilterStack(filters) {
     const el = document.getElementById("filter-stack");
     const clearBtn = document.getElementById("filter-stack-clear");
-    if (!el) return;
-    el.innerHTML = filters
-      .map(
-        (f) => `
+    const clauses = filters.filter((f) => f.type === "clause");
+    const chips = filters.filter((f) => f.type !== "clause" && f.type !== "open" && f.type !== "recent");
+    renderClauseList(clauses);
+    if (el) {
+      el.innerHTML = chips
+        .map(
+          (f) => `
       <span class="filter-chip filter-chip-${f.type}">
-        <span class="filter-chip-type">${FILTER_TYPE_LABELS[f.type] || f.type}</span>
-        <span class="filter-chip-value">${esc(f.type === "area" ? "map selection" : f.label)}</span>
-        <button type="button" class="filter-chip-remove" data-filter-id="${esc(f.id)}" aria-label="Remove filter">×</button>
+        <span class="filter-chip-value">${esc(f.type === "area" ? "Map area" : f.label)}</span>
+        <button type="button" class="filter-chip-remove" data-filter-id="${esc(f.id)}" aria-label="Remove">×</button>
       </span>`
-      )
-      .join("");
+        )
+        .join("");
+    }
     if (clearBtn) clearBtn.disabled = !filters.length;
+  }
+
+  function wireClauseList() {
+    const el = document.getElementById("clause-list");
+    if (!el || el.dataset.wired === "1") return;
+    el.dataset.wired = "1";
+    let dragId = null;
+    let phraseTimer = null;
+
+    function patchFromInput(input) {
+      const row = input.closest(".clause-row");
+      const field = input.dataset.clauseField;
+      if (!row || !field || !window.JobBoardsFilters) return;
+      JobBoardsFilters.updateClause(row.dataset.clauseId, { [field]: input.value });
+    }
+
+    el.addEventListener("input", (e) => {
+      const input = e.target.closest("[data-clause-field]");
+      if (!input) return;
+      if (input.dataset.clauseField === "phrase") {
+        clearTimeout(phraseTimer);
+        phraseTimer = setTimeout(() => patchFromInput(input), 180);
+        return;
+      }
+    });
+    el.addEventListener("change", (e) => {
+      const input = e.target.closest("[data-clause-field]");
+      if (!input) return;
+      if (input.dataset.clauseField === "phrase") {
+        clearTimeout(phraseTimer);
+      }
+      patchFromInput(input);
+    });
+    el.addEventListener("focusout", (e) => {
+      const input = e.target.closest("[data-clause-field='phrase']");
+      if (!input) return;
+      clearTimeout(phraseTimer);
+      patchFromInput(input);
+    });
+    el.addEventListener("click", (e) => {
+      const btn = e.target.closest(".clause-remove");
+      if (!btn || !window.JobBoardsFilters) return;
+      JobBoardsFilters.remove(btn.dataset.filterId);
+    });
+    el.addEventListener("mousedown", (e) => {
+      const handle = e.target.closest(".clause-drag");
+      const row = e.target.closest(".clause-row");
+      if (handle && row) row.draggable = true;
+    });
+    window.addEventListener("mouseup", () => {
+      if (dragId) return;
+      el.querySelectorAll(".clause-row[draggable='true']").forEach((r) => {
+        r.draggable = false;
+      });
+    });
+    el.addEventListener("dragstart", (e) => {
+      const row = e.target.closest(".clause-row");
+      if (!row) return;
+      dragId = row.dataset.clauseId;
+      row.classList.add("is-dragging");
+      e.dataTransfer.effectAllowed = "move";
+      e.dataTransfer.setData("text/plain", dragId);
+    });
+    el.addEventListener("dragend", (e) => {
+      const row = e.target.closest(".clause-row");
+      if (row) {
+        row.draggable = false;
+        row.classList.remove("is-dragging");
+      }
+      el.querySelectorAll(".clause-row.is-drag-over").forEach((r) => r.classList.remove("is-drag-over"));
+      dragId = null;
+    });
+    el.addEventListener("dragover", (e) => {
+      e.preventDefault();
+      const row = e.target.closest(".clause-row");
+      el.querySelectorAll(".clause-row").forEach((r) => r.classList.toggle("is-drag-over", r === row));
+    });
+    el.addEventListener("drop", (e) => {
+      e.preventDefault();
+      const row = e.target.closest(".clause-row");
+      if (row && dragId && window.JobBoardsFilters) {
+        JobBoardsFilters.moveClause(dragId, row.dataset.clauseId);
+      }
+    });
+
+    document.getElementById("clause-add-btn")?.addEventListener("click", () => {
+      if (!window.JobBoardsFilters) return;
+      focusNewClause = true;
+      JobBoardsFilters.add({ type: "clause", phrase: "" });
+    });
   }
 
   function restoreMapAreaFromFilters() {
@@ -439,7 +671,7 @@
     }
     const note = document.getElementById("static-site-note");
     if (note && meta.generated_at) {
-      note.textContent = `Listings updated ${formatLastUpdated(meta.generated_at)}`;
+      note.textContent = formatLastUpdated(meta.generated_at);
     }
     allJobsCache = jobsData.jobs || [];
     allMapJobsCache = mapData.jobs || [];
@@ -479,6 +711,7 @@
       if (!jobsLoadedOnce) await loadStaticDatasets();
       applyDisplay({ focusId: opts.focusId });
     } catch {
+      listPaintGen += 1;
       list.innerHTML = '<p class="empty-state">Failed to load jobs.</p>';
       if (footnote) footnote.textContent = "Failed to load map data.";
       updateResultCount(0);
@@ -500,21 +733,17 @@
       openToggle.classList.toggle("is-active", active);
       openToggle.setAttribute("aria-pressed", active ? "true" : "false");
     }
-    const recentToggle = document.getElementById("recent-jobs-toggle");
-    if (recentToggle && window.JobBoardsFilters) {
-      const active = JobBoardsFilters.isRecentFilterActive();
-      recentToggle.classList.toggle("is-active", active);
-      recentToggle.setAttribute("aria-pressed", active ? "true" : "false");
-    }
-    syncSortNewButton();
+    syncNewJobsButton();
     if (window.JobBoardsFilters) {
       window.history.replaceState(null, "", JobBoardsFilters.toUrl());
     }
+    syncRssLink();
     restoreMapAreaFromFilters();
     if (dateRangeCtrl) {
       const dateFilter = filters.find((f) => f.type === "date");
       dateRangeCtrl.setFromFilter(dateFilter || null);
     }
+    syncViewBar();
     if (window.JobBoardsPage !== "index") return;
     applyDisplay();
     scheduleReloadResults({ resetFit: !JobBoardsFilters?.getAreaFilter() });
@@ -606,48 +835,20 @@
       if (!window.JobBoardsFilters) return;
       JobBoardsFilters.toggleOpenFilter();
     });
-    document.getElementById("recent-jobs-toggle")?.addEventListener("click", () => {
+    document.getElementById("new-jobs-btn")?.addEventListener("click", () => {
       if (!window.JobBoardsFilters) return;
       JobBoardsFilters.toggleRecentFilter();
-    });
-    document.getElementById("sort-new-btn")?.addEventListener("click", () => {
-      applySortNewPreset();
     });
     wireJobsListMapEvents();
     restoreMapAreaFromFilters();
   }
 
-  function isSortNewPresetActive() {
-    if (!window.JobBoardsFilters) return false;
-    const sort = document.getElementById("sort-filter")?.value;
-    const order = document.getElementById("order-filter")?.value;
-    return (
-      JobBoardsFilters.isOpenFilterActive() &&
-      JobBoardsFilters.isRecentFilterActive() &&
-      sort === "posted_at" &&
-      order === "desc"
-    );
-  }
-
-  function syncSortNewButton() {
-    const btn = document.getElementById("sort-new-btn");
-    if (!btn) return;
-    btn.classList.toggle("is-active", isSortNewPresetActive());
-  }
-
-  function applySortNewPreset() {
-    if (!window.JobBoardsFilters) return;
-    const sortEl = document.getElementById("sort-filter");
-    const orderEl = document.getElementById("order-filter");
-    if (sortEl) sortEl.value = "posted_at";
-    if (orderEl) orderEl.value = "desc";
-    const filtersChanged = JobBoardsFilters.ensureOpenAndRecent();
-    if (!filtersChanged) {
-      JobBoardsFilters.saveSession();
-      syncFilterUrl();
-      syncSortNewButton();
-      scheduleReloadResults({ resetFit: true });
-    }
+  function syncNewJobsButton() {
+    const btn = document.getElementById("new-jobs-btn");
+    if (!btn || !window.JobBoardsFilters) return;
+    const active = JobBoardsFilters.isRecentFilterActive();
+    btn.classList.toggle("is-active", active);
+    btn.setAttribute("aria-pressed", active ? "true" : "false");
   }
 
   function csvEscape(value) {
@@ -701,27 +902,6 @@
     themeToggle.addEventListener("click", toggleTheme);
   }
 
-  ["source-filter", "sort-filter", "order-filter"].forEach((id) => {
-    document.getElementById(id)?.addEventListener("change", () => {
-      if (window.JobBoardsFilters) JobBoardsFilters.saveSession();
-      syncFilterUrl();
-      syncSortNewButton();
-      scheduleReloadResults({ resetFit: true });
-    });
-  });
-
-  const searchInput = document.getElementById("search-input");
-  if (searchInput) {
-    searchInput.addEventListener("keydown", (e) => {
-      if (e.key !== "Enter" || !window.JobBoardsFilters) return;
-      e.preventDefault();
-      const val = searchInput.value.trim();
-      if (!val) return;
-      JobBoardsFilters.add({ type: "search", value: val });
-      searchInput.value = "";
-    });
-  }
-
   document.addEventListener("DOMContentLoaded", () => {
     if (window.JobBoardsFilters) {
       const origToUrl = JobBoardsFilters.toUrl.bind(JobBoardsFilters);
@@ -734,9 +914,11 @@
 
     if (window.JobBoardsPage === "index") {
       initIndexMap();
+      wireClauseList();
       if (window.JobBoardsDateRange) {
         dateRangeCtrl = JobBoardsDateRange.create(document.getElementById("date-range-panel"));
       }
+      wireViewBar();
       if (window.JobBoardsFilters) {
         applyViewPrefsFromUrl();
         const initial =
@@ -761,7 +943,7 @@
           }
           const note = document.getElementById("static-site-note");
           if (note && meta.generated_at) {
-            note.textContent = `Listings updated ${formatLastUpdated(meta.generated_at)}`;
+            note.textContent = formatLastUpdated(meta.generated_at);
           }
         })
         .catch(() => {});
