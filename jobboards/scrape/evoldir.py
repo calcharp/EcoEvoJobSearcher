@@ -47,6 +47,85 @@ JOB_TYPE_TOKENS = {
     "fellow": "Fellow",
 }
 
+# Short EvolDir institution tokens that CamelCase expansion cannot recover.
+KNOWN_INSTITUTIONS = {
+    "uark": "University of Arkansas",
+    "uarkansas": "University of Arkansas",
+    "uf": "University of Florida",
+    "ucberkeley": "UC Berkeley",
+    "uc-berkeley": "UC Berkeley",
+    "ucla": "UCLA",
+    "ucsd": "UC San Diego",
+    "ucdavis": "UC Davis",
+    "ucsb": "UC Santa Barbara",
+    "uci": "UC Irvine",
+    "ucsc": "UC Santa Cruz",
+    "ucsf": "UCSF",
+    "mit": "MIT",
+    "nyu": "NYU",
+    "ntnu": "NTNU",
+    "eth": "ETH Zurich",
+    "ethz": "ETH Zurich",
+    "epfl": "EPFL",
+    "mpi": "Max Planck Institute",
+}
+
+
+def split_camel(token: str) -> str:
+    """Turn CamelCase / PascalCase tokens into spaced words, keeping acronyms."""
+    text = (token or "").strip()
+    if not text:
+        return ""
+    text = text.replace("-", " ").replace("_", " ")
+    text = re.sub(r"([a-z0-9])([A-Z])", r"\1 \2", text)
+    text = re.sub(r"([A-Z]+)([A-Z][a-z])", r"\1 \2", text)
+    text = re.sub(r"\s+", " ", text).strip()
+    return text
+
+
+def humanize_slug_phrase(value: str) -> str:
+    """Humanize an EvolDir subject/title fragment from a filename token."""
+    text = split_camel(value or "")
+    if not text:
+        return ""
+    # Leading "Tech" in slugs usually means technician / technical role.
+    if re.match(r"(?i)^tech\b", text) and not re.match(r"(?i)^tech(nical|nician|nology)\b", text):
+        text = re.sub(r"(?i)^tech\b", "Technician", text, count=1)
+    return text
+
+
+def humanize_institution(value: str) -> str:
+    """Expand EvolDir institution shorthands like UWisconsinMadison."""
+    raw = (value or "").strip()
+    if not raw:
+        return ""
+    key = raw.lower().replace(" ", "")
+    if key in KNOWN_INSTITUTIONS:
+        return KNOWN_INSTITUTIONS[key]
+
+    # Already looks like a normal name.
+    if " " in raw and not re.search(r"[a-z][A-Z]", raw):
+        return raw
+
+    spaced = split_camel(raw)
+
+    # UWisconsinMadison / UIowa → University of …
+    m = re.match(r"^U([A-Z][a-z].+)$", raw)
+    if m:
+        return f"University of {split_camel(m.group(1))}"
+
+    # UCBerkeley already handled; UC Something
+    m = re.match(r"^UC[-\s]?([A-Z].+)$", raw)
+    if m:
+        return f"UC {split_camel(m.group(1))}"
+
+    # WashingtonStateU / IowaStateU → … University
+    m = re.match(r"^(.+)\sU$", spaced)
+    if m and len(m.group(1)) >= 3:
+        return f"{m.group(1)} University"
+
+    return spaced or raw
+
 
 def fetch_index() -> list[dict[str, str]]:
     resp = SESSION.get(EVOLDIR_INDEX, timeout=http_timeout())
@@ -98,24 +177,25 @@ def _pick_best_url(urls: list[str]) -> Optional[str]:
 
 def _parse_slug(slug: str) -> dict[str, Optional[str]]:
     decoded = unquote(slug.replace("_", "."))
-    parts = re.split(r"[._]", decoded)
-    institution = parts[0] if parts else slug
+    parts = [p for p in re.split(r"[._]", decoded) if p]
+    institution = humanize_institution(parts[0]) if parts else humanize_institution(slug)
     location = None
     rank = None
-    subject = None
+    subject_parts: list[str] = []
 
     for p in parts[1:]:
         low = p.lower()
         if low in ("usa", "germany", "canada", "uk", "france", "australia", "norway", "austria", "taiwan", "uae"):
-            location = p
+            location = p.upper() if low == "usa" else p.title() if low != "uk" else "UK"
         elif any(tok in low for tok in JOB_TYPE_TOKENS):
             for tok, label in JOB_TYPE_TOKENS.items():
                 if tok in low:
                     rank = label
                     break
-        elif len(p) > 3 and p not in (institution,):
-            subject = p if not subject else f"{subject} {p}"
+        elif len(p) > 3 and p.lower() != (parts[0] or "").lower():
+            subject_parts.append(humanize_slug_phrase(p))
 
+    subject = " ".join(subject_parts) if subject_parts else None
     return {
         "institution": institution,
         "location": location,

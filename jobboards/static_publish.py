@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import shutil
 import time
 from datetime import datetime, timezone
@@ -50,6 +51,16 @@ def enrich_export_job(
     source_rows_by_url: dict[str, list[dict[str, Any]]] | None = None,
 ) -> dict[str, Any]:
     job = dict(job)
+    if job.get("source") == "evoldir":
+        from jobboards.scrape.evoldir import humanize_institution, humanize_slug_phrase
+
+        inst = job.get("institution") or ""
+        subject = job.get("subject_area") or ""
+        if inst and (" " not in inst or re.search(r"[a-z][A-Z]", inst)):
+            job["institution"] = humanize_institution(inst)
+        if subject and re.search(r"[a-z][A-Z]|_", subject):
+            job["subject_area"] = humanize_slug_phrase(subject)
+
     job["posted_display"] = format_display(job.get("posted_at"), include_time=True)
     job["apply_display"] = format_display(job.get("apply_by"))
     job["updated_display"] = format_display(job.get("updated_at"), include_time=True)
