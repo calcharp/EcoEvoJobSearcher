@@ -7,6 +7,19 @@ ECOEVO_FACULTY_GID = "332523242"
 ECOEVO_POSTDOC_GID = "900481761"
 # Canonical hub that redirects to the current season workbook.
 ECOEVO_HUB_URL = os.environ.get("ECOEVO_HUB_URL", "https://ecoevojobs.net/")
+# Prior-season workbooks to keep searchable after ecoevojobs rolls over.
+# Override with comma-separated IDs in ECOEVO_ARCHIVE_SHEET_IDS.
+_DEFAULT_ECOEVO_ARCHIVES = (
+    "1P7BfU0emdcGFVIWIs_erFxyy0UGXXORw7h0rpU19gQ8",  # 2025-26
+)
+ECOEVO_ARCHIVE_SHEET_IDS = tuple(
+    sid.strip()
+    for sid in os.environ.get(
+        "ECOEVO_ARCHIVE_SHEET_IDS",
+        ",".join(_DEFAULT_ECOEVO_ARCHIVES),
+    ).split(",")
+    if sid.strip()
+)
 
 EVOLDIR_INDEX = "https://www.evoldir.net/brian/Jobs.html"
 EVOLDIR_DETAIL_BASE = "https://www.evoldir.net/brian/evoldir/Jobs//"

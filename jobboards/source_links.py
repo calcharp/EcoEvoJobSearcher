@@ -33,14 +33,23 @@ def ecoevo_sheet_url(job: dict, *, focus_notes: bool = False) -> Optional[str]:
     if job.get("source") != "ecoevojobs":
         return None
     tab = job.get("source_tab") or "faculty"
-    gid = ecoevo_sheet_gid(tab)
+    slug = (job.get("source_slug") or "").strip()
     sheet_id = ecoevo_sheet_id()
+    gid = ecoevo_sheet_gid(tab)
+    row = ""
+
+    # New format: {sheet_id}/{gid}/{row}
+    parts = slug.split("/")
+    if len(parts) == 3 and parts[2].isdigit() and len(parts[0]) > 20:
+        sheet_id, gid, row = parts[0], parts[1], parts[2]
+    elif slug.isdigit():
+        row = slug
+
     base = (
         f"https://docs.google.com/spreadsheets/d/{sheet_id}/edit"
         f"?gid={gid}#gid={gid}"
     )
-    row = (job.get("source_slug") or "").strip()
-    if not row.isdigit():
+    if not row:
         return base
     if focus_notes:
         range_spec = f"{ecoevo_notes_col(tab)}{row}"

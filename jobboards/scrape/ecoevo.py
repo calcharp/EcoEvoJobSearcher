@@ -12,6 +12,7 @@ from urllib.parse import urlparse
 import requests
 
 from jobboards.config import (
+    ECOEVO_ARCHIVE_SHEET_IDS,
     ECOEVO_FACULTY_GID,
     ECOEVO_HUB_URL,
     ECOEVO_POSTDOC_GID,
@@ -20,7 +21,7 @@ from jobboards.config import (
     http_timeout,
 )
 from jobboards.dates import parse_ecoevo_date, parse_ecoevo_datetime
-from jobboards.db import make_id, normalize_url, upsert_job
+from jobboards.db import get_meta, make_id, normalize_url, upsert_job
 
 SESSION = requests.Session()
 SESSION.headers.update(HTTP_HEADERS)
@@ -183,6 +184,8 @@ def _parse_row(
     tab_name: str,
     scraped_at: str,
     sheet_row: int,
+    sheet_id: str,
+    gid: str,
 ) -> Optional[dict[str, Any]]:
     ts = _cell(row, mapping, "timestamp")
     posted = parse_ecoevo_datetime(ts)
@@ -199,6 +202,7 @@ def _parse_row(
     review = _cell(row, mapping, "review")
     last_up = _cell(row, mapping, "last_update")
     notes = _cell(row, mapping, "notes")
+    source_slug = f"{sheet_id}/{gid}/{sheet_row}"
 
     if tab_name == "faculty":
         rank = _cell(row, mapping, "rank")
@@ -209,7 +213,7 @@ def _parse_row(
             "id": make_id("ecoevojobs", "faculty", institution, url or ts, rank),
             "source": "ecoevojobs",
             "source_tab": "faculty",
-            "source_slug": str(sheet_row),
+            "source_slug": source_slug,
             "institution": institution,
             "location": location,
             "subject_area": subject,
@@ -240,7 +244,7 @@ def _parse_row(
         "id": make_id("ecoevojobs", "postdoc", institution, url or ts, pi),
         "source": "ecoevojobs",
         "source_tab": "postdoc",
-        "source_slug": str(sheet_row),
+        "source_slug": source_slug,
         "institution": institution,
         "location": location,
         "subject_area": subject,
@@ -289,9 +293,35 @@ def iter_tab_jobs(
     for sheet_row, row in enumerate(reader, start=2):
         if not row or not any((c or "").strip() for c in row):
             continue
-        job = _parse_row(row, mapping, tab_name=tab_name, scraped_at=scraped_at, sheet_row=sheet_row)
+        job = _parse_row(
+            row,
+            mapping,
+            tab_name=tab_name,
+            scraped_at=scraped_at,
+            sheet_row=sheet_row,
+            sheet_id=sheet_id,
+            gid=gid,
+        )
         if job:
             yield job
+
+
+def sheets_to_scrape() -> tuple[str, list[str]]:
+    """Return (current_sheet_id, all_sheet_ids) including prior-season archives."""
+    current = discover_sheet_id()
+    ordered: list[str] = [current]
+    seen = {current}
+
+    archives = list(ECOEVO_ARCHIVE_SHEET_IDS)
+    prev = get_meta("ecoevo_sheet_id")
+    if prev and prev not in seen:
+        archives.insert(0, prev)
+
+    for sheet_id in archives:
+        if sheet_id and sheet_id not in seen:
+            seen.add(sheet_id)
+            ordered.append(sheet_id)
+    return current, ordered
 
 
 def _persist_sheet_meta(
@@ -299,11 +329,13 @@ def _persist_sheet_meta(
     sheet_id: str,
     gids: dict[str, str],
     header_maps: dict[str, dict[str, int]],
+    archive_ids: list[str],
 ) -> None:
     rows = [
         ("ecoevo_sheet_id", sheet_id),
         ("ecoevo_faculty_gid", gids["faculty"]),
         ("ecoevo_postdoc_gid", gids["postdoc"]),
+        ("ecoevo_archive_sheet_ids", ",".join(archive_ids)),
     ]
     for tab in ("faculty", "postdoc"):
         notes_idx = header_maps.get(tab, {}).get("notes")
@@ -317,32 +349,25 @@ def _persist_sheet_meta(
         )
 
 
-def scrape_ecoevo(
+def _scrape_one_sheet(
     conn,
+    sheet_id: str,
+    scraped_at: str,
+    *,
     state: Any = None,
-    scraped_at: Optional[str] = None,
-) -> int:
-    scraped_at = scraped_at or datetime.now(timezone.utc).replace(microsecond=0).isoformat()
-    sheet_id = discover_sheet_id()
+    label: str = "ecoevojobs",
+    count_start: int = 0,
+) -> tuple[int, dict[str, str], dict[str, dict[str, int]]]:
     gids = resolve_job_tabs(sheet_id)
-
-    if state:
-        host = urlparse(ECOEVO_HUB_URL).netloc or "ecoevojobs.net"
-        state.update(
-            message=f"Downloading ecoevojobs ({host} → {sheet_id[:8]}…)…",
-            phase="ecoevojobs",
-        )
-
-    count = 0
-    known_total = 0
+    count = count_start
+    sheet_count = 0
     header_maps: dict[str, dict[str, int]] = {}
 
     for tab in ("faculty", "postdoc"):
         gid = gids[tab]
         if state:
-            state.update(message=f"Downloading ecoevojobs {tab}…", phase="ecoevojobs")
+            state.update(message=f"Downloading {label} {tab}…", phase="ecoevojobs")
 
-        # Capture header map once for notes-column deep links.
         resp = SESSION.get(_export_csv_url(sheet_id, gid), timeout=_timeout())
         resp.raise_for_status()
         rows = list(csv.reader(io.StringIO(resp.text)))
@@ -352,38 +377,92 @@ def scrape_ecoevo(
         header_maps[tab] = mapping
         if "timestamp" not in mapping or "institution" not in mapping:
             raise RuntimeError(
-                f"ecoevojobs {tab} headers missing required columns "
+                f"ecoevojobs {tab} ({sheet_id[:8]}…) headers missing required columns "
                 f"(have {list(mapping)}; raw={rows[0][:8]!r})"
             )
 
-        tab_count = 0
         for sheet_row, row in enumerate(rows[1:], start=2):
             if not row or not any((c or "").strip() for c in row):
                 continue
             job = _parse_row(
-                row, mapping, tab_name=tab, scraped_at=scraped_at, sheet_row=sheet_row
+                row,
+                mapping,
+                tab_name=tab,
+                scraped_at=scraped_at,
+                sheet_row=sheet_row,
+                sheet_id=sheet_id,
+                gid=gid,
             )
             if not job:
                 continue
             upsert_job(conn, job)
             count += 1
-            tab_count += 1
+            sheet_count += 1
             if state and (count == 1 or count % 25 == 0):
                 state.update(
                     ecoevo_done=count,
-                    ecoevo_total=max(known_total + tab_count, count),
+                    ecoevo_total=max(count, sheet_count),
                     message=f"ecoevojobs {count}",
                 )
             if count % 100 == 0:
                 conn.commit()
 
-        known_total += tab_count
-        if state:
-            state.update(ecoevo_total=known_total, ecoevo_done=count)
+    return sheet_count, gids, header_maps
 
-    _persist_sheet_meta(conn, sheet_id, gids, header_maps)
+
+def scrape_ecoevo(
+    conn,
+    state: Any = None,
+    scraped_at: Optional[str] = None,
+) -> int:
+    scraped_at = scraped_at or datetime.now(timezone.utc).replace(microsecond=0).isoformat()
+    current_id, sheet_ids = sheets_to_scrape()
+    archives = [sid for sid in sheet_ids if sid != current_id]
+
+    if state:
+        host = urlparse(ECOEVO_HUB_URL).netloc or "ecoevojobs.net"
+        extra = f" + {len(archives)} prior season{'s' if len(archives) != 1 else ''}" if archives else ""
+        state.update(
+            message=f"Downloading ecoevojobs ({host} → {current_id[:8]}…{extra})…",
+            phase="ecoevojobs",
+        )
+
+    total = 0
+    current_gids: dict[str, str] = {}
+    current_headers: dict[str, dict[str, int]] = {}
+
+    for idx, sheet_id in enumerate(sheet_ids):
+        is_current = sheet_id == current_id
+        label = "ecoevojobs" if is_current else f"ecoevojobs archive {idx}"
+        try:
+            n, gids, headers = _scrape_one_sheet(
+                conn,
+                sheet_id,
+                scraped_at,
+                state=state,
+                label=label,
+                count_start=total,
+            )
+        except Exception as exc:
+            if is_current:
+                raise
+            # Prior-season sheet missing/blocked should not fail the whole scrape.
+            if state:
+                state.update(message=f"Skipping ecoevo archive {sheet_id[:8]}… ({exc})")
+            continue
+        total += n
+        if is_current:
+            current_gids, current_headers = gids, headers
+        if state:
+            state.update(ecoevo_total=total, ecoevo_done=total)
+
+    if not current_gids:
+        # Fallback if current somehow failed before raise — shouldn't happen.
+        current_gids = resolve_job_tabs(current_id)
+
+    _persist_sheet_meta(conn, current_id, current_gids, current_headers, archives)
     conn.commit()
-    return count
+    return total
 
 
 def ecoevo_purge_is_safe(conn, new_count: int, scrape_started: str) -> tuple[bool, str]:
