@@ -5,6 +5,8 @@
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" crossorigin="">
 <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.css" crossorigin="">
 <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.Default.css" crossorigin="">
+<link rel="alternate" type="application/rss+xml" title="Eco &amp; Evo Jobs — New this Week" href="{{ base_path }}feed-week.xml">
+<link rel="alternate" type="application/rss+xml" title="Eco &amp; Evo Jobs — All time" href="{{ base_path }}feed-all.xml">
 {% endblock %}
 {% block content %}
 <section class="toolbar">
@@ -45,21 +47,21 @@
         >Open only</button>
         <button
           type="button"
-          class="filter-toggle-btn"
+          class="filter-toggle-btn is-active"
           id="new-jobs-btn"
-          aria-pressed="false"
-          title="Show only jobs posted today or yesterday"
-        >New jobs</button>
+          aria-pressed="true"
+          title="Show only jobs posted in the last 7 days"
+        >New this Week</button>
       </div>
       <div class="sort-panel">
         <div class="view-sort-btns" role="group" aria-label="Sort by">
-          <button type="button" class="view-sort-btn" data-sort="posted_at" aria-pressed="false" title="Sort by date posted">Posted<span class="view-sort-dir" aria-hidden="true"></span></button>
-          <button type="button" class="view-sort-btn is-active is-asc" data-sort="apply_by" aria-pressed="true" title="Sort by application deadline">Deadline<span class="view-sort-dir" aria-hidden="true"></span></button>
+          <button type="button" class="view-sort-btn is-active is-desc" data-sort="posted_at" aria-pressed="true" title="Sort by date posted">Posted<span class="view-sort-dir" aria-hidden="true"></span></button>
+          <button type="button" class="view-sort-btn" data-sort="apply_by" aria-pressed="false" title="Sort by application deadline">Deadline<span class="view-sort-dir" aria-hidden="true"></span></button>
           <button type="button" class="view-sort-btn" data-sort="updated_at" aria-pressed="false" title="Sort by last updated">Updated<span class="view-sort-dir" aria-hidden="true"></span></button>
           <button type="button" class="view-sort-btn" data-sort="institution" aria-pressed="false" title="Sort by institution">Name<span class="view-sort-dir" aria-hidden="true"></span></button>
         </div>
-        <input type="hidden" id="sort-filter" value="apply_by">
-        <input type="hidden" id="order-filter" value="asc">
+        <input type="hidden" id="sort-filter" value="posted_at">
+        <input type="hidden" id="order-filter" value="desc">
       </div>
     </div>
   </div>
@@ -70,7 +72,21 @@
     <div class="jobs-panel-header">
       <p class="jobs-result-count" id="jobs-result-count" aria-live="polite">Loading…</p>
       <div class="jobs-header-actions">
-        <a class="jobs-rss-link" id="jobs-rss-link" href="{{ base_path }}rss.html" title="RSS feed of the currently shown jobs">RSS</a>
+        <div class="jobs-rss" id="jobs-rss">
+          <button
+            type="button"
+            class="jobs-rss-toggle"
+            id="jobs-rss-toggle"
+            aria-expanded="false"
+            aria-haspopup="true"
+            aria-controls="jobs-rss-menu"
+            title="RSS feeds"
+          >RSS</button>
+          <div class="jobs-rss-menu" id="jobs-rss-menu" role="menu" hidden>
+            <a role="menuitem" href="{{ base_path }}feed-week.xml">New this Week</a>
+            <a role="menuitem" href="{{ base_path }}feed-all.xml">All time</a>
+          </div>
+        </div>
         <button type="button" class="jobs-export-btn" id="export-csv-btn" title="Download currently shown jobs as CSV" aria-label="Download currently shown jobs as CSV">
           <svg viewBox="0 0 24 24" aria-hidden="true">
             <path d="M12 3v12M8 11l4 4 4-4M5 21h14" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"/>

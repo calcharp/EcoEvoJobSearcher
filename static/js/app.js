@@ -37,8 +37,8 @@
   }
 
   function syncViewBar() {
-    const sort = document.getElementById("sort-filter")?.value || "apply_by";
-    const order = document.getElementById("order-filter")?.value || "asc";
+    const sort = document.getElementById("sort-filter")?.value || "posted_at";
+    const order = document.getElementById("order-filter")?.value || "desc";
     document.querySelectorAll(".view-sort-btn").forEach((btn) => {
       const val = btn.dataset.sort;
       const on = val === sort;
@@ -63,7 +63,6 @@
     syncViewBar();
     if (window.JobBoardsFilters) JobBoardsFilters.saveSession();
     syncFilterUrl();
-    syncRssLink();
     syncNewJobsButton();
     scheduleReloadResults({ resetFit: true });
   }
@@ -92,11 +91,33 @@
     }
   }
 
-  function syncRssLink() {
-    const el = document.getElementById("jobs-rss-link");
-    if (!el || !window.JobBoardsFilters) return;
-    const raw = JobBoardsFilters.toUrl();
-    el.href = String(raw || "").replace(/index\.html/i, "rss.html") || JobBoardsPageUrl("rss.html");
+  function setRssMenuOpen(open) {
+    const wrap = document.getElementById("jobs-rss");
+    const btn = document.getElementById("jobs-rss-toggle");
+    const menu = document.getElementById("jobs-rss-menu");
+    if (!wrap || !btn || !menu) return;
+    wrap.classList.toggle("is-open", open);
+    btn.setAttribute("aria-expanded", open ? "true" : "false");
+    menu.hidden = !open;
+  }
+
+  function wireRssMenu() {
+    const wrap = document.getElementById("jobs-rss");
+    const btn = document.getElementById("jobs-rss-toggle");
+    if (!wrap || !btn) return;
+    btn.addEventListener("click", (e) => {
+      e.stopPropagation();
+      setRssMenuOpen(btn.getAttribute("aria-expanded") !== "true");
+    });
+    wrap.querySelectorAll(".jobs-rss-menu a").forEach((a) => {
+      a.addEventListener("click", () => setRssMenuOpen(false));
+    });
+    document.addEventListener("click", (e) => {
+      if (!wrap.contains(e.target)) setRssMenuOpen(false);
+    });
+    document.addEventListener("keydown", (e) => {
+      if (e.key === "Escape") setRssMenuOpen(false);
+    });
   }
 
   function currentTheme() {
@@ -290,8 +311,8 @@
     }
     return {
       source: "all",
-      sort: document.getElementById("sort-filter")?.value || "apply_by",
-      order: document.getElementById("order-filter")?.value || "asc",
+      sort: document.getElementById("sort-filter")?.value || "posted_at",
+      order: document.getElementById("order-filter")?.value || "desc",
       clauses,
       dateRange: dateRange && (dateRange.from || dateRange.to) ? dateRange : null,
       openOnly: stack.some((f) => f.type === "open"),
@@ -737,7 +758,6 @@
     if (window.JobBoardsFilters) {
       window.history.replaceState(null, "", JobBoardsFilters.toUrl());
     }
-    syncRssLink();
     restoreMapAreaFromFilters();
     if (dateRangeCtrl) {
       const dateFilter = filters.find((f) => f.type === "date");
@@ -919,6 +939,7 @@
         dateRangeCtrl = JobBoardsDateRange.create(document.getElementById("date-range-panel"));
       }
       wireViewBar();
+      wireRssMenu();
       if (window.JobBoardsFilters) {
         applyViewPrefsFromUrl();
         const initial =

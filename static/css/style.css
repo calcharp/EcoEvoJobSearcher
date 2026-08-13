@@ -1451,29 +1451,6 @@ a.active-filter-clear:hover {
 /* Subject cloud */
 .page-nav { margin-bottom: 1rem; font-size: 0.9rem; }
 
-.rss-page {
-  max-width: 52rem;
-}
-
-.rss-lead {
-  margin: 0 0 0.85rem;
-  font-size: 0.9rem;
-  color: var(--text-muted);
-}
-
-.rss-xml {
-  margin: 0;
-  padding: 0;
-  border: none;
-  background: none;
-  color: var(--text-muted);
-  font-family: var(--mono);
-  font-size: 0.78rem;
-  line-height: 1.45;
-  white-space: pre-wrap;
-  word-break: break-word;
-}
-
 .cloud-header { margin-bottom: 1.25rem; }
 
 .cloud-title {
@@ -1703,16 +1680,55 @@ a.active-filter-clear:hover {
   flex-shrink: 0;
 }
 
-.jobs-rss-link {
+.jobs-rss {
+  position: relative;
+}
+
+.jobs-rss-toggle {
+  margin: 0;
+  padding: 0;
+  border: none;
+  background: none;
   color: var(--text-faint);
+  font: inherit;
   font-size: 0.85rem;
   font-weight: 600;
   letter-spacing: 0.04em;
-  text-decoration: none;
   line-height: 1;
+  cursor: pointer;
 }
 
-.jobs-rss-link:hover {
+.jobs-rss-toggle:hover,
+.jobs-rss.is-open .jobs-rss-toggle {
+  color: var(--accent);
+}
+
+.jobs-rss-menu {
+  position: absolute;
+  top: calc(100% + 0.35rem);
+  right: 0;
+  z-index: 40;
+  min-width: 9.5rem;
+  padding: 0.3rem 0;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg-elevated);
+  box-shadow: var(--shadow-md);
+}
+
+.jobs-rss-menu a {
+  display: block;
+  padding: 0.4rem 0.75rem;
+  color: var(--text);
+  font-size: 0.82rem;
+  font-weight: 500;
+  letter-spacing: 0;
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+.jobs-rss-menu a:hover {
+  background: var(--accent-dim);
   color: var(--accent);
 }
 

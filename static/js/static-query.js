@@ -91,11 +91,11 @@
     const day = postedLocalDay(job);
     if (!day) return false;
     const today = new Date();
-    const yesterday = new Date(today);
-    yesterday.setDate(yesterday.getDate() - 1);
+    const cutoff = new Date(today);
+    cutoff.setDate(cutoff.getDate() - 6);
     const todayStr = localDayString(today);
-    const yesterdayStr = localDayString(yesterday);
-    return day === todayStr || day === yesterdayStr;
+    const cutoffStr = localDayString(cutoff);
+    return day >= cutoffStr && day <= todayStr;
   }
 
   function compareValues(a, b) {
@@ -107,8 +107,8 @@
   }
 
   function sortJobs(jobs, sort, order) {
-    const col = sort || "apply_by";
-    const desc = (order || "asc").toLowerCase() === "desc";
+    const col = sort || "posted_at";
+    const desc = (order || "desc").toLowerCase() === "desc";
     return [...jobs].sort((a, b) => {
       const cmp = compareValues(a[col], b[col]);
       return desc ? -cmp : cmp;

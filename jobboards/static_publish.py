@@ -30,6 +30,7 @@ from jobboards.notes import parse_notes_thread
 from jobboards.scrape.runner import ScrapeState, scrape_all
 from jobboards.subjects import subject_term_counts
 from jobboards.search_suggest import search_suggest_index
+from jobboards.rss_feeds import write_feeds
 
 ROOT = Path(__file__).resolve().parent.parent
 GEO_CACHE_SEED = ROOT / "data" / "geo-cache.json"
@@ -131,7 +132,6 @@ def render_site_pages(out_dir: Path, base_path: str, stats: dict[str, Any]) -> N
       "index.html": env.get_template("index.html").render(active_page="index", stats=stats),
       "subjects.html": env.get_template("subjects.html").render(active_page="subjects", stats=stats),
       "job.html": env.get_template("job.html").render(active_page="job", stats=stats),
-      "rss.html": env.get_template("rss.html").render(active_page="", stats=stats),
       "404.html": env.get_template("404.html").render(active_page="", stats=stats),
   }
   for name, html in pages.items():
@@ -232,6 +232,13 @@ def publish(
 
     copy_static_assets(out_dir)
     render_site_pages(out_dir, base_path, stats)
+    feed_counts = write_feeds(
+        out_dir,
+        export_jobs,
+        base_path=base_path,
+        built_at=stats.get("last_fetched_at") or generated_at,
+    )
+    print(f"Wrote RSS feeds: week={feed_counts['week']} all={feed_counts['all']}")
     (out_dir / ".nojekyll").write_text("", encoding="utf-8")
 
     print(f"Publish finished in {time.monotonic() - t0:.1f}s total")

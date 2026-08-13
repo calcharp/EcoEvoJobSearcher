@@ -2,7 +2,7 @@
   let stack = [];
   let nextId = 1;
   const listeners = new Set();
-  const SESSION_KEY = "jobboards-session-v3";
+  const SESSION_KEY = "jobboards-session-v4";
   const SOURCES = new Set(["ecoevojobs", "evoldir", "sciencecareers"]);
 
   function makeId() {
@@ -55,12 +55,13 @@
   function defaultStack() {
     return [
       { id: makeId(), type: "open", label: "Open applications" },
+      { id: makeId(), type: "recent", label: "New this Week" },
       makeClause({}),
     ];
   }
 
   function defaultViewPrefs() {
-    return { sort: "apply_by", order: "asc" };
+    return { sort: "posted_at", order: "desc" };
   }
 
   function serializeFilter(f) {
@@ -165,7 +166,7 @@
       filters.push({ id: makeId(), type: "open", label: "Open applications" });
     }
     if (params.get("recent") === "1") {
-      filters.push({ id: makeId(), type: "recent", label: "New since yesterday" });
+      filters.push({ id: makeId(), type: "recent", label: "New this Week" });
     }
     return filters;
   }
@@ -219,8 +220,8 @@
   function getViewPrefs() {
     if (typeof document !== "undefined" && document.getElementById("sort-filter")) {
       return {
-        sort: document.getElementById("sort-filter")?.value || "apply_by",
-        order: document.getElementById("order-filter")?.value || "asc",
+        sort: document.getElementById("sort-filter")?.value || "posted_at",
+        order: document.getElementById("order-filter")?.value || "desc",
       };
     }
     return loadSession()?.view || defaultViewPrefs();
@@ -320,7 +321,7 @@
 
     if (filter.type === "recent") {
       if (stack.some((f) => f.type === "recent")) return;
-      stack.push({ id: makeId(), type: "recent", label: "New since yesterday" });
+      stack.push({ id: makeId(), type: "recent", label: "New this Week" });
       notify();
       return;
     }
@@ -423,7 +424,7 @@
     if (isRecentFilterActive()) {
       stack = stack.filter((f) => f.type !== "recent");
     } else {
-      stack.push({ id: makeId(), type: "recent", label: "New since yesterday" });
+      stack.push({ id: makeId(), type: "recent", label: "New this Week" });
     }
     notify();
   }
