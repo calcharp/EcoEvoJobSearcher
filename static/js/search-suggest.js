@@ -62,15 +62,31 @@
       out.push(s);
     };
     add(value);
+
+    // Short aliases (evo, ai, gis, …) expand to their cluster.
+    // Full phrases do not — on an eco/evo board, peer "related" terms are too broad.
     const aliasTarget = aliases[q];
-    const hit = terms.find((t) => t.key === q || t.key === aliasTarget);
+    if (aliasTarget) {
+      const hit = terms.find((t) => t.key === aliasTarget || t.key === q);
+      if (hit) {
+        add(hit.term);
+        (hit.related || []).forEach(add);
+      } else {
+        add(aliasTarget);
+      }
+      return out;
+    }
+
+    // Exact known term: only pull near-duplicates / spelling variants from related.
+    const hit = terms.find((t) => t.key === q);
     if (hit) {
       add(hit.term);
-      (hit.related || []).forEach(add);
+      (hit.related || []).forEach((r) => {
+        const rn = norm(r);
+        if (!rn || rn === q) return;
+        if (rn.includes(q) || q.includes(rn) || editDistance(rn, q) <= 2) add(r);
+      });
     }
-    terms.forEach((t) => {
-      if ((t.related || []).some((r) => norm(r) === q)) add(t.term);
-    });
     return out;
   }
 

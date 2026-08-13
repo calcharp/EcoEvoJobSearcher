@@ -60,7 +60,11 @@ RELATED_GROUPS: list[dict[str, list[str]]] = [
     },
     {
         "aliases": ["evo", "evo bio"],
-        "terms": ["evolutionary biology", "evolutionary ecology", "phylogenetic comparative methods"],
+        "terms": ["evolutionary biology", "evolutionary ecology"],
+    },
+    {
+        "aliases": [],
+        "terms": ["phylogenetic comparative methods", "comparative methods"],
     },
     {
         "aliases": [],
@@ -88,7 +92,7 @@ RELATED_GROUPS: list[dict[str, list[str]]] = [
     },
     {
         "aliases": ["stats", "statistical"],
-        "terms": ["quantitative ecology", "comparative methods", "bioinformatics"],
+        "terms": ["quantitative ecology", "bioinformatics"],
     },
 ]
 
